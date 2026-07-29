@@ -6,6 +6,11 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import gradio as gr
 
+print("=" * 50)
+print("Current directory:", os.getcwd())
+print("Files:", os.listdir())
+print("Model exists:", os.path.exists("breed_prediction_model.pkl"))
+print("=" * 50)
 # ==============================================================================
 # MODEL LOADING & FALLBACK HANDLER
 # ==============================================================================
