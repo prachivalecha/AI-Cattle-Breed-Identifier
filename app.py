@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime
 import joblib
@@ -169,7 +170,7 @@ def load_or_create_model():
 TFIDF_VECTORIZER, TFIDF_MATRIX, BREED_DATA = load_or_create_model()
 
 # ==============================================================================
-# PREDICTION ENGINE & VALIDATION logic
+# PREDICTION ENGINE & VALIDATION LOGIC
 # ==============================================================================
 def predict_breed(b_type, climate, utility, milk_yield, milk_fat, traits, features):
     if not b_type or not climate or not utility:
@@ -1010,7 +1011,7 @@ with gr.Blocks(title="AI Cattle & Buffalo Breed Identification", css=CUSTOM_CSS)
             )
 
         # SECTION 5: BUTTONS
-        with gr.Row(style={"margin-top": "1rem"}):
+        with gr.Row():
             predict_btn = gr.Button("✨ Predict Breed", elem_classes=["btn-primary"], scale=2)
             example_btn = gr.Button("📋 Load Example Input", elem_classes=["btn-secondary"], scale=1)
             clear_btn = gr.Button("🧹 Clear Form", elem_classes=["btn-secondary"], scale=1)
@@ -1195,4 +1196,9 @@ with gr.Blocks(title="AI Cattle & Buffalo Breed Identification", css=CUSTOM_CSS)
     )
 
 if __name__ == "__main__":
-    demo.launch(show_error=True)
+    port = int(os.environ.get("PORT", 10000))
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=port,
+        show_error=True
+    )
