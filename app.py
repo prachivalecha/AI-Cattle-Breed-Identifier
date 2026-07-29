@@ -1,1108 +1,1211 @@
 import os
-import random
-import time
-from datetime import datetime
+import re
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import gradio as gr
 
-# -----------------------------------------------------------------------------
-# 1. MODEL LOADING & PREPARATION
-# -----------------------------------------------------------------------------
-MODEL_PATH = "breed_prediction_model.pkl"
+# ==============================================================================
+# MODEL LOADING & FALLBACK HANDLER
+# ==============================================================================
+MODEL_FILE = "breed_prediction_model.pkl"
 
 def load_model():
-    if os.path.exists(MODEL_PATH):
+    """
+    Attempts to load the pre-trained TF-IDF model dictionary.
+    Expected structure of loaded dict:
+    {
+        'tfidf': TfidfVectorizer instance,
+        'tfidf_matrix': scipy sparse matrix or numpy array,
+        'breed_data': pandas DataFrame containing breed records
+    }
+    """
+    if os.path.exists(MODEL_FILE):
         try:
-            model_data = joblib.load(MODEL_PATH)
-            return (
-                model_data.get("tfidf"),
-                model_data.get("tfidf_matrix"),
-                model_data.get("breed_data"),
-                None
-            )
+            model_data = joblib.load(MODEL_FILE)
+            if isinstance(model_data, dict) and 'tfidf' in model_data and 'tfidf_matrix' in model_data and 'breed_data' in model_data:
+                return model_data, True, "Model loaded successfully from " + MODEL_FILE
+            else:
+                return None, False, "Loaded file does not contain required keys ('tfidf', 'tfidf_matrix', 'breed_data')."
         except Exception as e:
-            return None, None, None, f"Error loading model pickle file: {str(e)}"
+            return None, False, f"Error loading pickle file: {str(e)}"
     else:
-        # Fallback dummy data structure for graceful UI preview if pkl is missing during initial setup
-        return None, None, None, "Model file 'breed_prediction_model.pkl' not found. Please place it in the root directory."
+        return None, False, f"Model file '{MODEL_FILE}' not found. Please place it in the application directory."
 
-tfidf_vec, tfidf_mat, breed_df, model_load_error = load_model()
+model_obj, MODEL_LOADED, MODEL_STATUS_MSG = load_model()
 
-# -----------------------------------------------------------------------------
-# 2. DYNAMIC BACKGROUND SELECTOR & ASSET HANDLING
-# -----------------------------------------------------------------------------
-def get_background_css():
-    bg_folder = "assets"
-    bg_candidates = [
-        os.path.join(bg_folder, f"background{i}.jpg") for i in range(1, 6)
-    ]
-    valid_bgs = [bg for bg in bg_candidates if os.path.exists(bg)]
+# ==============================================================================
+# PREDICTION & VALIDATION LOGIC
+# ==============================================================================
+def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, physical_traits, special_features):
+    """
+    Validates user input, formats user feature text, computes TF-IDF vectorization,
+    calculates Cosine Similarity, and returns structured result components.
+    """
+    # Inline validation rules
+    errors = []
     
-    if valid_bgs:
-        selected_bg = random.choice(valid_bgs).replace("\\", "/")
-        bg_style = f"background-image: linear-gradient(rgba(15, 30, 22, 0.75), rgba(15, 30, 22, 0.85)), url('{selected_bg}');"
-    else:
-        bg_style = "background: radial-gradient(circle at 50% 20%, #1D3526 0%, #0F1E16 80%);"
-        
-    return bg_style
-
-# -----------------------------------------------------------------------------
-# 3. PREDICTIVE AI ENGINE
-# -----------------------------------------------------------------------------
-def predict_breed(animal_type, climate, utility, milk_yield, milk_fat, physical_traits, special_features):
-    # Validation checks
     if not animal_type or animal_type == "Select Animal Type":
-        return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Please select a valid Animal Type.</div>", "", "", ""
-    if not climate or climate == "Select Climate Suitability":
-        return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Please select Climate Suitability.</div>", "", "", ""
-    if not utility or utility == "Select Primary Utility":
-        return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Please select Primary Utility.</div>", "", "", ""
-    
-    try:
-        milk_yield_val = float(milk_yield)
-        if milk_yield_val < 0:
-            return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Milk yield cannot be negative.</div>", "", "", ""
-    except Exception:
-        return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Please enter a valid number for Milk Yield.</div>", "", "", ""
-
-    try:
-        milk_fat_val = float(milk_fat)
-        if milk_fat_val < 0 or milk_fat_val > 15:
-            return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Milk Fat % must be between 0 and 15%.</div>", "", "", ""
-    except Exception:
-        return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Please enter a valid number for Milk Fat %.</div>", "", "", ""
-
-    if not physical_traits or len(physical_traits.strip()) < 5:
-        return "<div class='error-toast'><i class='lucide-alert-triangle'></i> Please provide descriptive Physical Traits (at least 5 characters).</div>", "", "", ""
-
-    # Check model state
-    if tfidf_vec is None or tfidf_mat is None or breed_df is None:
-        # Fallback simulation for deployment demonstration when .pkl is not bundled
-        time.sleep(0.6)
-        timestamp = datetime.now().strftime("%B %d, %Y - %I:%M %p")
+        errors.append("Please select a valid Animal Type (Cow or Buffalo).")
         
-        simulated_breed = "Gir Cow" if animal_type.lower() == "cow" else "Murrah Buffalo"
-        top1_score = 94.2
-        top2_name, top2_score = ("Sahiwal", 81.5) if animal_type.lower() == "cow" else ("Nili-Ravi", 78.4)
-        top3_name, top3_score = ("Red Sindhi", 72.1) if animal_type.lower() == "cow" else ("Jafarabadi", 69.8)
-
-        primary_card = f"""
-        <div class='glass-card primary-result-card animate-fade-in'>
-            <div class='result-header'>
-                <div>
-                    <span class='badge-confidence'><i class='lucide-shield-check'></i> Top AI Match</span>
-                    <h2 class='predicted-title'>{simulated_breed}</h2>
-                </div>
-                <div class='score-ring'>
-                    <span class='score-val'>{top1_score}%</span>
-                    <span class='score-lbl'>Similarity</span>
-                </div>
-            </div>
-            <div class='progress-bar-bg'>
-                <div class='progress-bar-fill' style='width: {top1_score}%;'></div>
-            </div>
-            <div class='result-footer'>
-                <span><i class='lucide-clock'></i> Evaluated on: {timestamp}</span>
-                <span><i class='lucide-cpu'></i> Engine: TF-IDF + Cosine Sim</span>
-            </div>
-        </div>
-        """
-
-        top3_html = f"""
-        <div class='top3-grid animate-fade-in'>
-            <div class='glass-card sub-match-card rank-1'>
-                <div class='rank-badge'>#1 Best Match</div>
-                <h4>{simulated_breed}</h4>
-                <div class='metric-row'>
-                    <span>Similarity</span>
-                    <strong>{top1_score}%</strong>
-                </div>
-                <div class='progress-bar-bg sm'><div class='progress-bar-fill' style='width: {top1_score}%;'></div></div>
-            </div>
-            <div class='glass-card sub-match-card'>
-                <div class='rank-badge secondary'>#2 Match</div>
-                <h4>{top2_name}</h4>
-                <div class='metric-row'>
-                    <span>Similarity</span>
-                    <strong>{top2_score}%</strong>
-                </div>
-                <div class='progress-bar-bg sm'><div class='progress-bar-fill' style='width: {top2_score}%;'></div></div>
-            </div>
-            <div class='glass-card sub-match-card'>
-                <div class='rank-badge secondary'>#3 Match</div>
-                <h4>{top3_name}</h4>
-                <div class='metric-row'>
-                    <span>Similarity</span>
-                    <strong>{top3_score}%</strong>
-                </div>
-                <div class='progress-bar-bg sm'><div class='progress-bar-fill' style='width: {top3_score}%;'></div></div>
-            </div>
-        </div>
-        """
-
-        detail_html = f"""
-        <div class='glass-card detail-card animate-fade-in'>
-            <h3><i class='lucide-info'></i> Comprehensive Profile: {simulated_breed}</h3>
-            <div class='info-grid'>
-                <div class='info-item'><i class='lucide-cow'></i> <div><label>Animal Type</label><span>{animal_type}</span></div></div>
-                <div class='info-item'><i class='lucide-map-pin'></i> <div><label>Native Region</label><span>Gujarat / Punjab, India</span></div></div>
-                <div class='info-item'><i class='lucide-sun'></i> <div><label>Climate Adaptability</label><span>{climate}</span></div></div>
-                <div class='info-item'><i class='lucide-milk'></i> <div><label>Avg. Milk Yield</label><span>{milk_yield_val} Liters / lactation</span></div></div>
-                <div class='info-item'><i class='lucide-chart-pie'></i> <div><label>Avg. Fat Content</label><span>{milk_fat_val}%</span></div></div>
-                <div class='info-item'><i class='lucide-shield'></i> <div><label>Primary Utility</label><span>{utility}</span></div></div>
-            </div>
-            <div class='text-block'>
-                <strong><i class='lucide-eye'></i> Physical Characteristics:</strong>
-                <p>{physical_traits}</p>
-            </div>
-            <div class='text-block'>
-                <strong><i class='lucide-sparkles'></i> Special Breed Features:</strong>
-                <p>{special_features if special_features else 'High disease resistance, well-developed hump, excellent heat tolerance.'}</p>
-            </div>
-        </div>
-        """
-        return "", primary_card, top3_html, detail_html
-
-    # Real Inference Pipeline
-    user_query = f"{animal_type} {climate} {utility} milk yield {milk_yield_val} fat {milk_fat_val} {physical_traits} {special_features}"
-    query_vec = tfidf_vec.transform([user_query])
-    similarities = cosine_similarity(query_vec, tfidf_mat).flatten()
-
-    top_indices = np.argsort(similarities)[::-1][:3]
-    top1_idx = top_indices[0]
-    
-    top1_row = breed_df.iloc[top1_idx]
-    top1_score = round(float(similarities[top1_idx]) * 100, 2)
-    
-    timestamp = datetime.now().strftime("%B %d, %Y - %I:%M %p")
-
-    breed_name = top1_row.get("Breed Name", top1_row.get("breed_name", "Identified Breed"))
-
-    primary_card = f"""
-    <div class='glass-card primary-result-card animate-fade-in'>
-        <div class='result-header'>
-            <div>
-                <span class='badge-confidence'><i class='lucide-shield-check'></i> Top AI Match</span>
-                <h2 class='predicted-title'>{breed_name}</h2>
-            </div>
-            <div class='score-ring'>
-                <span class='score-val'>{top1_score}%</span>
-                <span class='score-lbl'>Similarity</span>
-            </div>
-        </div>
-        <div class='progress-bar-bg'>
-            <div class='progress-bar-fill' style='width: {min(top1_score, 100)}%;'></div>
-        </div>
-        <div class='result-footer'>
-            <span><i class='lucide-clock'></i> Evaluated on: {timestamp}</span>
-            <span><i class='lucide-cpu'></i> Engine: TF-IDF Vectorization & Cosine Matching</span>
-        </div>
-    </div>
-    """
-
-    top3_html = "<div class='top3-grid animate-fade-in'>"
-    for rank, idx in enumerate(top_indices, 1):
-        r_name = breed_df.iloc[idx].get("Breed Name", breed_df.iloc[idx].get("breed_name", f"Breed #{rank}"))
-        r_score = round(float(similarities[idx]) * 100, 2)
-        badge_cls = "rank-1" if rank == 1 else ""
-        badge_lbl = "#1 Best Match" if rank == 1 else f"#{rank} Match"
-        sub_cls = "" if rank == 1 else "secondary"
+    if not climate or climate == "Select Climate":
+        errors.append("Please select a valid Climate Suitability.")
         
-        top3_html += f"""
-        <div class='glass-card sub-match-card {badge_cls}'>
-            <div class='rank-badge {sub_cls}'>{badge_lbl}</div>
-            <h4>{r_name}</h4>
-            <div class='metric-row'>
-                <span>Similarity</span>
-                <strong>{r_score}%</strong>
+    if not utility or utility == "Select Utility":
+        errors.append("Please select a Primary Utility.")
+        
+    try:
+        milk_yield = float(milk_yield_str)
+        if milk_yield <= 0:
+            errors.append("Average Milk Yield must be a positive number greater than 0.")
+    except (ValueError, TypeError):
+        errors.append("Please enter a valid numeric value for Average Milk Yield.")
+
+    try:
+        milk_fat = float(milk_fat_str)
+        if milk_fat <= 0 or milk_fat > 25:
+            errors.append("Milk Fat percentage must be a valid positive number (e.g., between 1% and 20%).")
+    except (ValueError, TypeError):
+        errors.append("Please enter a valid numeric value for Milk Fat %.")
+
+    if not physical_traits or len(physical_traits.strip()) < 3:
+        errors.append("Please provide descriptive Physical Traits (minimum 3 characters).")
+
+    if not special_features or len(special_features.strip()) < 3:
+        errors.append("Please provide descriptive Special Features or behavior.")
+
+    if errors:
+        error_html = "<div class='validation-card-error'>"
+        error_html += "<div class='val-header'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#d93838' stroke-width='2'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'></path><line x1='12' y1='9' x2='12' y2='13'></line><line x1='12' y1='17' x2='12.01' y2='17'></line></svg><span>Input Validation Notice</span></div><ul>"
+        for err in errors:
+            error_html += f"<li>{err}</li>"
+        error_html += "</ul></div>"
+        return error_html, "", "", "", ""
+
+    if not MODEL_LOADED:
+        error_html = f"<div class='validation-card-error'><div class='val-header'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#d93838' stroke-width='2'><circle cx='12' cy='12' r='10'></circle><line x1='12' y1='8' x2='12' y2='12'></line><line x1='12' y1='16' x2='12.01' y2='16'></line></svg><span>Model Initialization Error</span></div><p>{MODEL_STATUS_MSG}</p></div>"
+        return error_html, "", "", "", ""
+
+    try:
+        tfidf_vec = model_obj['tfidf']
+        tfidf_mat = model_obj['tfidf_matrix']
+        df = model_obj['breed_data']
+
+        # Combine user inputs into unified representation
+        combined_user_text = f"Animal: {animal_type}. Climate: {climate}. Utility: {utility}. Milk Yield: {milk_yield} kg/day. Fat: {milk_fat}%. Physical Traits: {physical_traits}. Special Features: {special_features}."
+        
+        # Transform and compute cosine similarity
+        user_vector = tfidf_vec.transform([combined_user_text])
+        similarities = cosine_similarity(user_vector, tfidf_mat).flatten()
+
+        # Optional filtering by animal type if column exists in dataset
+        filtered_indices = np.argsort(similarities)[::-1]
+        if 'Animal' in df.columns or 'Type' in df.columns:
+            type_col = 'Animal' if 'Animal' in df.columns else 'Type'
+            type_matches = [i for i in filtered_indices if str(df.iloc[i][type_col]).strip().lower() == animal_type.strip().lower()]
+            if type_matches:
+                filtered_indices = type_matches
+
+        top_indices = filtered_indices[:3]
+        best_idx = top_indices[0]
+        best_score = float(similarities[best_idx])
+        score_pct = round(best_score * 100, 1)
+
+        best_row = df.iloc[best_idx]
+        best_breed_name = best_row.get('Breed', best_row.get('Breed Name', f'Breed #{best_idx+1}'))
+
+        # Result Summary HTML
+        result_summary_html = f"""
+        <div class="result-success-box">
+            <div class="result-badge-hdr">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <span>Prediction Successful</span>
             </div>
-            <div class='progress-bar-bg sm'><div class='progress-bar-fill' style='width: {min(r_score, 100)}%;'></div></div>
+            <div class="predicted-main-title">{best_breed_name}</div>
+            <div class="confidence-container">
+                <div class="confidence-label-row">
+                    <span class="conf-title">AI Similarity Confidence</span>
+                    <span class="conf-value">{score_pct}% Match</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" style="width: {score_pct}%;"></div>
+                </div>
+            </div>
         </div>
         """
-    top3_html += "</div>"
 
-    region = top1_row.get("Region", top1_row.get("region", "Native Belt"))
-    c_suit = top1_row.get("Climate", top1_row.get("climate", climate))
-    m_yield = top1_row.get("Milk Yield", top1_row.get("milk_yield", f"{milk_yield_val} L"))
-    m_fat = top1_row.get("Milk Fat", top1_row.get("milk_fat", f"{milk_fat_val}%"))
-    util_val = top1_row.get("Utility", top1_row.get("utility", utility))
-    traits_val = top1_row.get("Physical Traits", top1_row.get("physical_traits", physical_traits))
-    spec_val = top1_row.get("Special Features", top1_row.get("special_features", special_features))
+        # Top 3 Matching Breeds Cards HTML
+        top3_html = "<div class='top3-grid'>"
+        for rank, idx in enumerate(top_indices, 1):
+            row = df.iloc[idx]
+            b_name = row.get('Breed', row.get('Breed Name', f'Breed #{idx+1}'))
+            b_score = round(float(similarities[idx]) * 100, 1)
+            b_type = row.get('Animal', row.get('Type', animal_type))
+            b_origin = row.get('Origin', row.get('Region', 'Native India'))
+            
+            top3_html += f"""
+            <div class="top3-card {'top3-card-first' if rank==1 else ''}">
+                <div class="top3-rank-badge">#{rank} Candidate</div>
+                <div class="top3-breed-title">{b_name}</div>
+                <div class="top3-meta">
+                    <span><strong>Type:</strong> {b_type}</span>
+                    <span><strong>Origin:</strong> {b_origin}</span>
+                </div>
+                <div class="top3-score-pill">{b_score}% Similarity</div>
+            </div>
+            """
+        top3_html += "</div>"
 
-    detail_html = f"""
-    <div class='glass-card detail-card animate-fade-in'>
-        <h3><i class='lucide-info'></i> Comprehensive Breed Profile: {breed_name}</h3>
-        <div class='info-grid'>
-            <div class='info-item'><i class='lucide-cow'></i> <div><label>Animal Classification</label><span>{top1_row.get('Animal Type', animal_type)}</span></div></div>
-            <div class='info-item'><i class='lucide-map-pin'></i> <div><label>Native Region / Origin</label><span>{region}</span></div></div>
-            <div class='info-item'><i class='lucide-sun'></i> <div><label>Climate Suitability</label><span>{c_suit}</span></div></div>
-            <div class='info-item'><i class='lucide-milk'></i> <div><label>Milk Production Profile</label><span>{m_yield}</span></div></div>
-            <div class='info-item'><i class='lucide-chart-pie'></i> <div><label>Milk Fat Percentage</label><span>{m_fat}</span></div></div>
-            <div class='info-item'><i class='lucide-shield'></i> <div><label>Primary Utility</label><span>{util_val}</span></div></div>
+        # Detailed Breed Info Card HTML
+        b_climate = best_row.get('Climate', best_row.get('Climate Suitability', climate))
+        b_yield = best_row.get('Milk Yield', best_row.get('Average Milk Yield', f"{milk_yield} kg/day"))
+        b_fat = best_row.get('Milk Fat', best_row.get('Fat %', f"{milk_fat}%"))
+        b_utility = best_row.get('Utility', utility)
+        b_cross = best_row.get('Crossbreeding', best_row.get('Crossbreeding Programs', 'Extensively used in indigenous improvement programs.'))
+        b_traits = best_row.get('Physical Traits', physical_traits)
+        b_special = best_row.get('Special Features', special_features)
+        b_origin = best_row.get('Origin', best_row.get('Region of Origin', 'Pan-India native tract'))
+
+        breed_info_html = f"""
+        <div class="breed-detail-card">
+            <div class="detail-header">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <h3>Comprehensive Breed Dossier: {best_breed_name}</h3>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>
+                    <div class="d-content"><strong>Region of Origin</strong><span>{b_origin}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg></div>
+                    <div class="d-content"><strong>Climate Suitability</strong><span>{b_climate}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></div>
+                    <div class="d-content"><strong>Average Milk Yield</strong><span>{b_yield}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg></div>
+                    <div class="d-content"><strong>Milk Fat Content</strong><span>{b_fat}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg></div>
+                    <div class="d-content"><strong>Primary Utility</strong><span>{b_utility}</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
+                    <div class="d-content"><strong>Crossbreeding Value</strong><span>{b_cross}</span></div>
+                </div>
+            </div>
+            <div class="detail-text-block">
+                <strong>Physical Traits:</strong>
+                <p>{b_traits}</p>
+            </div>
+            <div class="detail-text-block">
+                <strong>Special Distinctive Features:</strong>
+                <p>{b_special}</p>
+            </div>
         </div>
-        <div class='text-block'>
-            <strong><i class='lucide-eye'></i> Key Physical Traits:</strong>
-            <p>{traits_val}</p>
-        </div>
-        <div class='text-block'>
-            <strong><i class='lucide-sparkles'></i> Special Breed Features & Adaptability:</strong>
-            <p>{spec_val}</p>
-        </div>
-    </div>
-    """
+        """
 
-    return "", primary_card, top3_html, detail_html
+        return "", result_summary_html, top3_html, breed_info_html, "Section successfully evaluated."
 
+    except Exception as ex:
+        err_msg = f"<div class='validation-card-error'><div class='val-header'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#d93838' stroke-width='2'><circle cx='12' cy='12' r='10'></circle><line x1='15' y1='9' x2='9' y2='15'></line><line x1='9' y1='9' x2='15' y2='15'></line></svg><span>Runtime Processing Error</span></div><p>{str(ex)}</p></div>"
+        return err_msg, "", "", "", ""
 
-def load_example():
-    return (
-        "Cow",
-        "Tropical & Arid",
-        "Milch (Dairy)",
-        2200,
-        4.5,
-        "Distinct reddish-brown coat, long pendulous ears, prominent hump, convex forehead, and loose skin dewlap.",
-        "High resistance to tick fever and tropical diseases. Superior thermoregulation in extreme heat conditions."
-    )
+# ==============================================================================
+# GRADIO APPLICATION INTERFACE
+# ==============================================================================
+custom_css = """
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@500;600;700;800&family=Outfit:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
 
-
-def clear_form():
-    return (
-        "Select Animal Type",
-        "Select Climate Suitability",
-        "Select Primary Utility",
-        0,
-        0.0,
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-    )
-
-# -----------------------------------------------------------------------------
-# 4. CUSTOM CSS THEME INJECTION
-# -----------------------------------------------------------------------------
-custom_css = f"""
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-@import url('https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css');
-
-* {{
-    font-family: 'Poppins', sans-serif !important;
+/* Global Container & Resets */
+* {
     box-sizing: border-box;
-}}
+    scroll-behavior: smooth;
+}
 
-body, .gradio-container {{
-    {get_background_css()}
-    background-size: cover !important;
-    background-position: center !important;
-    background-repeat: no-repeat !important;
-    background-attachment: fixed !important;
-    color: #FFFFFF !important;
+body, .gradio-container {
+    background-color: #fdfbf7 !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    color: #2c3531 !important;
+    margin: 0 !important;
+    padding: 0 !important;
     min-height: 100vh;
-    margin: 0;
-    padding: 0;
-}}
+}
 
-/* Dark Glassmorphism Container */
-.main-wrapper {{
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 24px 16px;
-}}
+/* Fullscreen Crossfade Background Slideshow */
+.slideshow-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    overflow: hidden;
+}
 
-/* Glass Cards */
-.glass-card {{
-    background: rgba(255, 255, 255, 0.07) !important;
-    backdrop-filter: blur(16px) !important;
-    -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 20px !important;
-    padding: 28px !important;
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.37) !important;
-    margin-bottom: 24px !important;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}}
+.slideshow-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    animation: imageFade 32s infinite ease-in-out;
+    filter: blur(4px) brightness(0.92) contrast(0.95);
+    transform: scale(1.03);
+}
 
-.glass-card:hover {{
-    border-color: rgba(212, 163, 115, 0.3) !important;
-    box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.5) !important;
-}}
+.slideshow-slide:nth-child(1) {
+    background-image: url('https://images.unsplash.com/photo-1546445317-29f4545f9d52?auto=format&fit=crop&w=1920&q=80');
+    animation-delay: 0s;
+}
+.slideshow-slide:nth-child(2) {
+    background-image: url('https://images.unsplash.com/photo-1500595046743-cd271d694d30?auto=format&fit=crop&w=1920&q=80');
+    animation-delay: 8s;
+}
+.slideshow-slide:nth-child(3) {
+    background-image: url('https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?auto=format&fit=crop&w=1920&q=80');
+    animation-delay: 16s;
+}
+.slideshow-slide:nth-child(4) {
+    background-image: url('https://images.unsplash.com/photo-1527153857715-3908f2bae5e8?auto=format&fit=crop&w=1920&q=80');
+    animation-delay: 24s;
+}
 
-/* Hero Section */
-.hero-card {{
+@keyframes imageFade {
+    0% { opacity: 0; transform: scale(1.03); }
+    6% { opacity: 0.35; }
+    25% { opacity: 0.35; }
+    31% { opacity: 0; transform: scale(1.07); }
+    100% { opacity: 0; }
+}
+
+.slideshow-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(253, 251, 247, 0.82) 0%, rgba(247, 244, 238, 0.88) 100%);
+    backdrop-filter: blur(12px);
+}
+
+/* Glassmorphism Generic Card Styling */
+.glass-card {
+    background: rgba(255, 255, 255, 0.72) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.8) !important;
+    border-radius: 26px !important;
+    box-shadow: 0 16px 40px -12px rgba(46, 77, 62, 0.08), 0 4px 12px rgba(0, 0, 0, 0.02) !important;
+    padding: 32px !important;
+    margin-bottom: 32px !important;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.glass-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 22px 48px -12px rgba(46, 77, 62, 0.12), 0 8px 20px rgba(0, 0, 0, 0.03) !important;
+    border-color: rgba(46, 125, 50, 0.25) !important;
+}
+
+/* Hero Section Styling */
+.hero-wrapper {
     text-align: center;
-    padding: 40px 24px !important;
-    background: linear-gradient(135deg, rgba(29, 53, 38, 0.7), rgba(15, 30, 22, 0.85)) !important;
-    border: 1px solid rgba(212, 163, 115, 0.25) !important;
-}}
+    padding: 40px 20px 20px 20px;
+}
 
-.hero-title {{
-    font-size: 2.4rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #FFFFFF 0%, #D4A373 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 12px;
-}}
+.hero-logo-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 68px;
+    height: 68px;
+    background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+    border-radius: 20px;
+    box-shadow: 0 10px 25px -5px rgba(46, 125, 50, 0.35);
+    margin-bottom: 20px;
+}
 
-.hero-subtitle {{
-    font-size: 1.05rem;
-    color: #D8D8D8;
-    max-width: 800px;
-    margin: 0 auto 24px auto;
-    line-height: 1.6;
-}}
+.hero-title {
+    font-family: 'Outfit', 'Poppins', sans-serif !important;
+    font-size: 2.8rem !important;
+    font-weight: 800 !important;
+    color: #1a3323 !important;
+    letter-spacing: -0.03em !important;
+    line-height: 1.18 !important;
+    margin-bottom: 14px !important;
+}
 
-.badge-container {{
+.hero-subtitle {
+    font-family: 'Inter', sans-serif !important;
+    font-size: 1.15rem !important;
+    color: #4a5d52 !important;
+    max-width: 760px !important;
+    margin: 0 auto 28px auto !important;
+    line-height: 1.6 !important;
+    font-weight: 400 !important;
+}
+
+.badges-container {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     gap: 10px;
     margin-top: 16px;
-}}
+}
 
-.tech-badge {{
-    background: rgba(139, 94, 52, 0.3);
-    border: 1px solid #8B5E34;
-    color: #D4A373;
-    padding: 6px 14px;
-    border-radius: 30px;
-    font-size: 0.82rem;
-    font-weight: 500;
+.hero-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-}}
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(46, 125, 50, 0.18);
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2e7d32;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    transition: all 0.25s ease;
+}
 
-/* Form Styling */
-.gr-form, .gr-box {{
-    background: transparent !important;
-    border: none !important;
-}}
+.hero-badge:hover {
+    background: #2e7d32;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(46, 125, 50, 0.25);
+}
 
-label span {{
-    color: #D4A373 !important;
-    font-weight: 600 !important;
-    font-size: 0.9rem !important;
-    margin-bottom: 6px !important;
+/* How to Fill Section */
+.section-hdr-title {
+    font-family: 'Manrope', sans-serif !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: #1a3323 !important;
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
-}}
+    gap: 12px !important;
+    margin-bottom: 20px !important;
+}
 
-input, select, textarea {{
-    background: rgba(15, 30, 22, 0.7) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    color: #FFFFFF !important;
-    border-radius: 12px !important;
-    padding: 12px 16px !important;
-    font-size: 0.95rem !important;
-    transition: border-color 0.3s ease !important;
-}}
-
-input:focus, select:focus, textarea:focus {{
-    border-color: #D4A373 !important;
-    outline: none !important;
-    box-shadow: 0 0 0 2px rgba(212, 163, 115, 0.2) !important;
-}}
-
-/* Buttons */
-.btn-primary {{
-    background: linear-gradient(135deg, #8B5E34 0%, #D4A373 100%) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 12px !important;
-    padding: 14px 28px !important;
-    font-weight: 600 !important;
-    font-size: 1rem !important;
-    cursor: pointer !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 6px 20px rgba(139, 94, 52, 0.4) !important;
-}}
-
-.btn-primary:hover {{
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 25px rgba(212, 163, 115, 0.5) !important;
-}}
-
-.btn-secondary {{
-    background: rgba(255, 255, 255, 0.08) !important;
-    color: #D8D8D8 !important;
-    border: 1px solid rgba(255, 255, 255, 0.18) !important;
-    border-radius: 12px !important;
-    padding: 12px 22px !important;
-    font-weight: 500 !important;
-    transition: all 0.3s ease !important;
-}}
-
-.btn-secondary:hover {{
-    background: rgba(255, 255, 255, 0.15) !important;
-    color: #FFFFFF !important;
-}}
-
-/* Results Section */
-.primary-result-card {{
-    background: linear-gradient(135deg, rgba(29, 53, 38, 0.9), rgba(15, 30, 22, 0.95)) !important;
-    border: 1px solid #D4A373 !important;
-}}
-
-.result-header {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-}}
-
-.predicted-title {{
-    font-size: 2rem;
-    font-weight: 700;
-    color: #FFFFFF;
-    margin: 4px 0 0 0;
-}}
-
-.badge-confidence {{
-    background: rgba(163, 177, 138, 0.25);
-    border: 1px solid #A3B18A;
-    color: #A3B18A;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-}}
-
-.score-ring {{
-    text-align: right;
-}}
-
-.score-val {{
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: #D4A373;
-    display: block;
-    line-height: 1;
-}}
-
-.score-lbl {{
-    font-size: 0.75rem;
-    color: #D8D8D8;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}}
-
-.progress-bar-bg {{
-    width: 100%;
-    height: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    overflow: hidden;
-    margin: 16px 0;
-}}
-
-.progress-bar-bg.sm {{
-    height: 6px;
-}}
-
-.progress-bar-fill {{
-    height: 100%;
-    background: linear-gradient(90deg, #8B5E34, #D4A373);
-    border-radius: 10px;
-    transition: width 1s ease-in-out;
-}}
-
-.result-footer {{
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    color: #D8D8D8;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding-top: 12px;
-    margin-top: 12px;
-}}
-
-/* Top 3 Grid */
-.top3-grid {{
+.guide-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
     margin-bottom: 24px;
-}}
+}
 
-.sub-match-card {{
-    padding: 20px !important;
-    position: relative;
-}}
-
-.sub-match-card h4 {{
-    margin: 8px 0;
-    font-size: 1.2rem;
-    color: #FFFFFF;
-}}
-
-.rank-badge {{
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #D4A373;
-    text-transform: uppercase;
-}}
-
-.rank-badge.secondary {{
-    color: #A3B18A;
-}}
-
-.metric-row {{
+.guide-item {
     display: flex;
-    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(230, 235, 230, 0.8);
+    border-radius: 16px;
+}
+
+.guide-icon-box {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #e8f5e9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.guide-text h4 {
+    margin: 0 0 4px 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1a3323;
+}
+
+.guide-text p {
+    margin: 0;
     font-size: 0.85rem;
-    margin-top: 8px;
-}}
+    color: #556b5d;
+    line-height: 1.45;
+}
 
-/* Detail Card */
-.info-grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin: 20px 0;
-}}
-
-.info-item {{
+.info-alert-banner {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 12px 16px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}}
+    padding: 14px 20px;
+    background: rgba(224, 242, 254, 0.7);
+    border: 1px solid rgba(186, 230, 253, 0.9);
+    border-radius: 14px;
+    color: #0369a1;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
 
-.info-item i {{
-    font-size: 1.5rem;
-    color: #D4A373;
-}}
+/* Inputs & Form Elements */
+.gr-box, .gr-input, .gr-select, textarea {
+    border-radius: 14px !important;
+    border: 1px solid rgba(200, 215, 205, 0.8) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.01) !important;
+    transition: all 0.25s ease !important;
+}
 
-.info-item label {{
-    font-size: 0.75rem;
-    color: #D8D8D8;
-    display: block;
-}}
+.gr-box:focus-within, .gr-input:focus, .gr-select:focus, textarea:focus {
+    border-color: #2e7d32 !important;
+    box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15) !important;
+}
 
-.info-item span {{
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #FFFFFF;
-}}
+/* Primary Action Button */
+.predict-btn {
+    background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%) !important;
+    color: #ffffff !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    border-radius: 16px !important;
+    padding: 16px 32px !important;
+    border: none !important;
+    box-shadow: 0 10px 24px -6px rgba(46, 125, 50, 0.4) !important;
+    cursor: pointer !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    width: 100% !important;
+    margin-top: 12px !important;
+}
 
-.text-block {{
-    background: rgba(0, 0, 0, 0.2);
-    padding: 16px;
-    border-radius: 12px;
-    margin-top: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}}
+.predict-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 14px 30px -6px rgba(46, 125, 50, 0.5) !important;
+    background: linear-gradient(135deg, #338a37 0%, #206d26 100%) !important;
+}
 
-.text-block strong {{
-    color: #D4A373;
+/* Validation and Error Display */
+.validation-card-error {
+    background: rgba(254, 242, 242, 0.9);
+    border: 1px solid rgba(254, 202, 202, 0.9);
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 20px;
+}
+
+.val-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
-}}
+    font-weight: 700;
+    color: #991b1b;
+    margin-bottom: 8px;
+}
 
-.text-block p {{
+.validation-card-error ul {
+    margin: 4px 0 0 20px;
+    padding: 0;
+    color: #b91c1c;
+    font-size: 0.9rem;
+}
+
+/* Result Section Styling */
+.result-success-box {
+    background: linear-gradient(135deg, rgba(232, 245, 233, 0.8) 0%, rgba(200, 230, 201, 0.5) 100%);
+    border: 1px solid rgba(165, 214, 167, 0.8);
+    border-radius: 20px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.result-badge-hdr {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #2e7d32;
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.predicted-main-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #1b5e20;
+    margin-bottom: 16px;
+}
+
+.confidence-container {
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.confidence-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #388e3c;
+    margin-bottom: 6px;
+}
+
+.progress-bar-bg {
+    width: 100%;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #66bb6a 0%, #2e7d32 100%);
+    border-radius: 20px;
+    transition: width 1s ease-in-out;
+}
+
+/* Top 3 Cards Grid */
+.top3-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.top3-card {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(220, 230, 222, 0.9);
+    border-radius: 18px;
+    padding: 18px;
+    position: relative;
+    transition: all 0.25s ease;
+}
+
+.top3-card-first {
+    border-color: rgba(46, 125, 50, 0.4);
+    box-shadow: 0 8px 20px -6px rgba(46, 125, 50, 0.15);
+}
+
+.top3-rank-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #2e7d32;
+    margin-bottom: 6px;
+}
+
+.top3-breed-title {
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1a3323;
+    margin-bottom: 8px;
+}
+
+.top3-meta span {
+    display: block;
+    font-size: 0.82rem;
+    color: #556b5d;
+    margin-bottom: 4px;
+}
+
+.top3-score-pill {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 10px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+/* Detailed Dossier Card */
+.breed-detail-card {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 20px;
+    padding: 24px;
+    border: 1px solid rgba(220, 230, 222, 0.9);
+}
+
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(230, 235, 230, 0.8);
+    padding-bottom: 12px;
+}
+
+.detail-header h3 {
+    margin: 0;
+    font-family: 'Manrope', sans-serif;
+    font-size: 1.3rem;
+    color: #1a3323;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(247, 250, 248, 0.8);
+    border-radius: 12px;
+}
+
+.d-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #e8f5e9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.d-content strong {
+    display: block;
+    font-size: 0.75rem;
+    color: #668070;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.d-content span {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1a3323;
+}
+
+.detail-text-block {
+    margin-top: 14px;
+    padding: 14px;
+    background: rgba(247, 250, 248, 0.8);
+    border-radius: 12px;
+}
+
+.detail-text-block strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #2e7d32;
+    margin-bottom: 4px;
+}
+
+.detail-text-block p {
     margin: 0;
     font-size: 0.9rem;
-    color: #D8D8D8;
+    color: #3b4d42;
     line-height: 1.5;
-}}
+}
 
-/* Error Toast */
-.error-toast {{
-    background: rgba(220, 53, 69, 0.2) !important;
-    border: 1px solid #dc3545 !important;
-    color: #ff8b94 !important;
-    padding: 14px 20px !important;
-    border-radius: 12px !important;
-    font-weight: 500 !important;
-    margin-bottom: 20px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-}}
+/* Timeline Layout */
+.timeline-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    margin-top: 10px;
+}
 
-/* Timeline */
-.timeline-step {{
+.timeline-step {
     display: flex;
     align-items: flex-start;
     gap: 16px;
-    margin-bottom: 20px;
-    position: relative;
-}}
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(230, 235, 230, 0.8);
+    border-radius: 18px;
+    padding: 18px;
+    transition: all 0.25s ease;
+}
 
-.timeline-step:not(:last-child)::after {{
-    content: '';
-    position: absolute;
-    left: 20px;
-    top: 40px;
-    bottom: -16px;
-    width: 2px;
-    background: rgba(212, 163, 115, 0.3);
-}}
+.timeline-step:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateX(4px);
+}
 
-.step-number {{
-    width: 40px;
-    height: 40px;
+.step-num {
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #8B5E34, #D4A373);
-    color: white;
+    background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.95rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
     flex-shrink: 0;
-}}
+    box-shadow: 0 4px 10px rgba(46, 125, 50, 0.25);
+}
 
-.step-content h4 {{
+.step-content h4 {
     margin: 0 0 4px 0;
-    color: #FFFFFF;
-    font-size: 1rem;
-}}
-
-.step-content p {{
-    margin: 0;
-    color: #D8D8D8;
-    font-size: 0.85rem;
-}}
-
-/* Stats Grid */
-.stats-grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-}}
-
-.stat-card {{
-    background: rgba(0, 0, 0, 0.25);
-    padding: 18px;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    text-align: center;
-}}
-
-.stat-val {{
-    font-size: 1.5rem;
+    font-size: 1.05rem;
     font-weight: 700;
-    color: #A3B18A;
-    margin-bottom: 4px;
-}}
+    color: #1a3323;
+}
 
-.stat-lbl {{
-    font-size: 0.8rem;
-    color: #D8D8D8;
-}}
+.step-content p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: #556b5d;
+    line-height: 1.45;
+}
 
-/* Accordion Customization */
-.gr-accordion {{
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 14px !important;
-    overflow: hidden !important;
-}}
-
-.gr-accordion-header {{
-    font-weight: 600 !important;
-    color: #D4A373 !important;
-}}
-
-/* Footer */
-.developer-footer {{
-    text-align: center;
-    padding: 32px 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    margin-top: 40px;
-}}
-
-.social-links {{
-    display: flex;
-    justify-content: center;
+/* About Model Card */
+.model-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 16px;
     margin-top: 16px;
-}}
+}
 
-.social-btn {{
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #FFFFFF;
-    padding: 8px 18px;
-    border-radius: 20px;
-    text-decoration: none;
-    font-size: 0.85rem;
-    transition: all 0.3s ease;
+.model-info-item {
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 14px;
+    border: 1px solid rgba(230, 235, 230, 0.8);
+}
+
+.model-info-item label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    color: #668070;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.model-info-item span {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1a3323;
+}
+
+.status-badge-ok {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-}}
+    padding: 6px 14px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+    border-radius: 30px;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
 
-.social-btn:hover {{
-    background: #D4A373;
-    color: #0F1E16;
-}}
+/* Footer Section */
+.footer-card {
+    text-align: center;
+    padding: 32px 20px !important;
+    margin-top: 40px !important;
+}
 
-/* Animations */
-.animate-fade-in {{
-    animation: fadeIn 0.5s ease-in-out;
-}}
+.footer-dev-name {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1a3323;
+    margin-bottom: 4px;
+}
 
-@keyframes fadeIn {{
-    from {{ opacity: 0; transform: translateY(10px); }}
-    to {{ opacity: 1; transform: translateY(0); }}
-}}
+.footer-dev-title {
+    font-size: 0.9rem;
+    color: #556b5d;
+    margin-bottom: 18px;
+}
+
+.footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.btn-social {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: #ffffff;
+    border: 1px solid rgba(200, 215, 205, 0.8);
+    border-radius: 50px;
+    color: #2e7d32;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.25s ease;
+}
+
+.btn-social:hover {
+    background: #2e7d32;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(46, 125, 50, 0.2);
+}
+
+.footer-note {
+    font-size: 0.82rem;
+    color: #7a8f82;
+}
+
+/* Back to Top Floating Button */
+.back-to-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: #2e7d32;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 20px rgba(46, 125, 50, 0.35);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    z-index: 999;
+}
+
+.back-to-top:hover {
+    transform: translateY(-4px);
+    background: #1b5e20;
+}
 """
 
-# -----------------------------------------------------------------------------
-# 5. GRADIO BLOCKS APPLICATION LAYOUT
-# -----------------------------------------------------------------------------
-with gr.Blocks(css=custom_css, title="AI Breed Identifier - Prachi Valecha") as demo:
-    with gr.Column(elem_classes=["main-wrapper"]):
+with gr.Blocks(title="AI Breed Identification System", css=custom_css) as demo:
+    
+    # Background Animated Slideshow HTML
+    gr.HTML("""
+    <div class="slideshow-bg">
+        <div class="slideshow-slide"></div>
+        <div class="slideshow-slide"></div>
+        <div class="slideshow-slide"></div>
+        <div class="slideshow-slide"></div>
+    </div>
+    <div class="slideshow-overlay"></div>
+    <a href="#top" class="back-to-top" title="Back to Top">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </a>
+    """)
 
-        # HERO SECTION
-        with gr.Column(elem_classes=["glass-card", "hero-card"]):
+    with gr.Column(elem_id="top"):
+        
+        # 1. HERO SECTION
+        with gr.Column(elem_classes=["glass-card", "hero-wrapper"]):
             gr.HTML("""
-            <div style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 12px;">
-                <i class="lucide-brain-circuit" style="font-size: 2.8rem; color: #D4A373;"></i>
-                <i class="lucide-sparkles" style="font-size: 2rem; color: #A3B18A;"></i>
+            <div class="hero-logo-box">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path><path d="M12 6a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm0 10a4 4 0 1 1 4-4 4 4 0 0 1-4 4z"></path></svg>
             </div>
             <h1 class="hero-title">AI-Based Cattle & Buffalo Breed Identification System</h1>
-            <p class="hero-subtitle">
-                An enterprise-grade intelligent decision system mapping morphological features, environmental adaptability, 
-                and yield metrics to 41 distinct indigenous breed profiles via TF-IDF Vectorization & Cosine Similarity.
-            </p>
-            <div class="badge-container">
-                <span class="tech-badge"><i class="lucide-cpu"></i> Artificial Intelligence</span>
-                <span class="tech-badge"><i class="lucide-file-text"></i> TF-IDF Vectorization</span>
-                <span class="tech-badge"><i class="lucide-git-commit"></i> Cosine Similarity</span>
-                <span class="tech-badge"><i class="lucide-database"></i> 41 Breed Profiles</span>
-                <span class="tech-badge"><i class="lucide-zap"></i> Real-time Similarity Engine</span>
-                <span class="tech-badge"><i class="lucide-shield-check"></i> Cloud Tech Demo</span>
+            <p class="hero-subtitle">Identify the most probable cattle or buffalo breed using Artificial Intelligence powered by TF-IDF Vectorization and Cosine Similarity.</p>
+            <div class="badges-container">
+                <span class="hero-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg> AI Powered</span>
+                <span class="hero-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg> TF-IDF</span>
+                <span class="hero-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> Cosine Similarity</span>
+                <span class="hero-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Fast Prediction</span>
+                <span class="hero-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg> Indian Breeds</span>
+                <span class="hero-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path></svg> Global Breeds</span>
             </div>
             """)
 
-        # MODEL LOAD WARNING ALERT IF PKL MISSING
-        if model_load_error:
-            gr.HTML(f"""
-            <div class="error-toast">
-                <i class="lucide-alert-circle"></i>
-                <div>
-                    <strong>System Notice:</strong> {model_load_error}
-                    <br/><small>Running in Simulated Production Mode for interface demonstration.</small>
+        # 2. HOW TO FILL DETAILS SECTION
+        with gr.Column(elem_classes=["glass-card"]):
+            gr.HTML("""
+            <div class="section-hdr-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span>How to Fill the Details</span>
+            </div>
+            <div class="guide-grid">
+                <div class="guide-item">
+                    <div class="guide-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </div>
+                    <div class="guide-text">
+                        <h4>Animal Type</h4>
+                        <p>Select whether the subject is a Cow or Buffalo from the dropdown.</p>
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>
+                    </div>
+                    <div class="guide-text">
+                        <h4>Climate Suitability</h4>
+                        <p>Choose the primary ecological region (e.g., Arid, Tropical, Humid).</p>
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+                    </div>
+                    <div class="guide-text">
+                        <h4>Average Milk Yield</h4>
+                        <p>Enter average daily milk yield in kilograms (e.g., 14.5 kg/day).</p>
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+                    </div>
+                    <div class="guide-text">
+                        <h4>Milk Fat %</h4>
+                        <p>Enter the percentage of butterfat content in milk (e.g., 4.5% to 8%).</p>
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                    </div>
+                    <div class="guide-text">
+                        <h4>Physical Traits</h4>
+                        <p>Describe hump size, horn style, coat color, body shape, and forehead profile.</p>
+                    </div>
+                </div>
+                <div class="guide-item">
+                    <div class="guide-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    </div>
+                    <div class="guide-text">
+                        <h4>Utility & Features</h4>
+                        <p>Specify primary use (Milch, Draught, Dual) along with distinct behaviors.</p>
+                    </div>
                 </div>
             </div>
+            <div class="info-alert-banner">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span>The more detailed your information, the more accurate the prediction becomes.</span>
+            </div>
             """)
 
-        # MAIN WORKSPACE GRID
-        with gr.Row():
+        # 3. PREDICTION INPUT SECTION
+        with gr.Column(elem_classes=["glass-card"]):
+            gr.HTML("""
+            <div class="section-hdr-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <span>Input Animal Attributes</span>
+            </div>
+            """)
             
-            # LEFT COLUMN - INPUT CONTROLS
-            with gr.Column(scale=5):
-                with gr.Column(elem_classes=["glass-card"]):
-                    gr.HTML("""
-                    <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                        <i class="lucide-sliders"></i> Phenotypic Input Parameters
-                    </h3>
-                    <p style="color: #D8D8D8; font-size: 0.85rem; margin-bottom: 20px;">
-                        Specify observed physical characteristics and production metrics to compute similarity.
-                    </p>
-                    """)
-
-                    error_box = gr.HTML()
-
-                    animal_type = gr.Dropdown(
+            validation_out = gr.HTML()
+            
+            with gr.Row():
+                with gr.Column():
+                    animal_input = gr.Dropdown(
                         choices=["Cow", "Buffalo"],
                         label="Animal Type",
-                        value="Cow",
-                        info="Select species classification"
+                        value="Cow"
+                    )
+                    climate_input = gr.Dropdown(
+                        choices=["Arid & Semi-Arid", "Hot & Humid Tropical", "Moderate & Temperate", "All-Weather Adaptable"],
+                        label="Climate Suitability",
+                        value="Arid & Semi-Arid"
+                    )
+                    utility_input = gr.Dropdown(
+                        choices=["Milch (Dairy)", "Draught (Work)", "Dual Purpose"],
+                        label="Utility",
+                        value="Milch (Dairy)"
+                    )
+                with gr.Column():
+                    yield_input = gr.Textbox(
+                        label="Average Milk Yield (kg/day)",
+                        placeholder="e.g., 14.5",
+                        value="14.0"
+                    )
+                    fat_input = gr.Textbox(
+                        label="Milk Fat %",
+                        placeholder="e.g., 4.5",
+                        value="4.5"
                     )
 
-                    with gr.Row():
-                        climate = gr.Dropdown(
-                            choices=["Tropical & Arid", "Humid & Coastal", "Temperate & Hilly", "All-Weather Adaptive"],
-                            label="Climate Suitability",
-                            value="Tropical & Arid",
-                            info="Native climatic region profile"
-                        )
-                        utility = gr.Dropdown(
-                            choices=["Milch (Dairy)", "Draught (Work)", "Dual Purpose"],
-                            label="Primary Utility",
-                            value="Milch (Dairy)",
-                            info="Primary agricultural purpose"
-                        )
-
-                    with gr.Row():
-                        milk_yield = gr.Number(
-                            label="Avg Milk Yield (Liters/Lactation)",
-                            value=1800,
-                            precision=0,
-                            info="Expected yield per lactation cycle"
-                        )
-                        milk_fat = gr.Number(
-                            label="Avg Milk Fat (%)",
-                            value=4.5,
-                            precision=1,
-                            info="Fat percentage in milk"
-                        )
-
-                    physical_traits = gr.Textbox(
-                        label="Physical Traits & Morphological Description",
-                        placeholder="e.g., Medium size, lyre-shaped horns, prominent hump, white to light grey coat, pendulous ears...",
-                        lines=3,
-                        info="Coat color, horn shape, ear structure, hump, dewlap, stature"
+            with gr.Row():
+                with gr.Column():
+                    traits_input = gr.TextArea(
+                        label="Physical Traits",
+                        placeholder="Describe coat color, horn style, hump size, ears...",
+                        value="Reddish brown coat, white speckles, pendulous ears, prominent broad forehead, medium curved horns.",
+                        lines=3
+                    )
+                with gr.Column():
+                    features_input = gr.TextArea(
+                        label="Special Features",
+                        placeholder="Describe heat tolerance, disease resistance, docile temperament...",
+                        value="Extremely high heat tolerance, resistant to tropical tick diseases, docile temperament.",
+                        lines=3
                     )
 
-                    special_features = gr.Textbox(
-                        label="Special Characteristics / Behavioral Traits",
-                        placeholder="e.g., High heat tolerance, disease resistance, docile temperament, efficient feed conversion...",
-                        lines=2,
-                        info="Heat tolerance, disease immunity, walking speed, temperament"
-                    )
+            predict_btn = gr.Button("Predict Breed", elem_classes=["predict-btn"])
 
-                    with gr.Row():
-                        predict_btn = gr.Button("Predict Breed Profile", elem_classes=["btn-primary"])
-                        clear_btn = gr.Button("Clear Inputs", elem_classes=["btn-secondary"])
-                        example_btn = gr.Button("Load Sample Data", elem_classes=["btn-secondary"])
-
-            # RIGHT COLUMN - RESULTS DISPLAY
-            with gr.Column(scale=7):
-                primary_result_out = gr.HTML("""
-                <div class='glass-card' style='text-align: center; padding: 40px 20px !important;'>
-                    <i class='lucide-search' style='font-size: 3rem; color: #D4A373; margin-bottom: 12px; display: block;'></i>
-                    <h3 style='color: #FFFFFF; margin: 0;'>Awaiting Input Features</h3>
-                    <p style='color: #D8D8D8; font-size: 0.9rem; max-width: 400px; margin: 8px auto 0 auto;'>
-                        Fill in the physical characteristics on the left panel and click <strong>Predict Breed Profile</strong> to run vector similarity matching.
-                    </p>
-                </div>
-                """)
-                
-                top3_result_out = gr.HTML()
-                detail_result_out = gr.HTML()
-
-        # HOW THE AI WORKS & ARCHITECTURE SECTION
+        # 4. RESULT SECTION
         with gr.Column(elem_classes=["glass-card"]):
             gr.HTML("""
-            <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                <i class="lucide-cpu"></i> How the AI Vector Similarity Engine Works
-            </h3>
-            <p style="color: #D8D8D8; font-size: 0.9rem; margin-bottom: 20px;">
-                Rather than standard static classification, this system converts text descriptions into high-dimensional numerical vectors to find the mathematical nearest breed profile.
-            </p>
+            <div class="section-hdr-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <span>AI Identification Results</span>
+            </div>
             """)
+            
+            res_summary_out = gr.HTML("""
+            <div style="text-align:center; padding: 30px; color: #668070; font-size:0.95rem;">
+                Submit animal attributes above to compute TF-IDF cosine vector similarities and display match predictions.
+            </div>
+            """)
+            
+            top3_out = gr.HTML()
+            
+            # 5. BREED INFORMATION CARD
+            dossier_out = gr.HTML()
+            
+            status_out = gr.HTML(visible=False)
 
-            with gr.Accordion("View Machine Learning Workflow Pipeline", open=False):
-                gr.HTML("""
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 12px;">
-                    <div style="background: rgba(0,0,0,0.25); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
-                        <div style="color: #D4A373; font-weight: 700; margin-bottom: 6px;">1. Input Aggregation</div>
-                        <p style="color: #D8D8D8; font-size: 0.82rem; margin: 0;">Combines discrete parameters and unstructured morphological descriptions into a unified document representation.</p>
-                    </div>
-                    <div style="background: rgba(0,0,0,0.25); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
-                        <div style="color: #D4A373; font-weight: 700; margin-bottom: 6px;">2. TF-IDF Transformation</div>
-                        <p style="color: #D8D8D8; font-size: 0.82rem; margin: 0;">Transforms text features into term frequency-inverse document frequency vectors, weighing rare breed traits heavily.</p>
-                    </div>
-                    <div style="background: rgba(0,0,0,0.25); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
-                        <div style="color: #D4A373; font-weight: 700; margin-bottom: 6px;">3. Cosine Similarity Calculation</div>
-                        <p style="color: #D8D8D8; font-size: 0.82rem; margin: 0;">Computes dot product angles between the user query vector and 41 pre-indexed indigenous breed vector profiles.</p>
-                    </div>
-                    <div style="background: rgba(0,0,0,0.25); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
-                        <div style="color: #D4A373; font-weight: 700; margin-bottom: 6px;">4. Rank Ordering</div>
-                        <p style="color: #D8D8D8; font-size: 0.82rem; margin: 0;">Sorts similarity scores to return top candidate breeds, confidence ratings, and complete breed profile metadata.</p>
-                    </div>
-                </div>
-                """)
-
-        # MODEL INFORMATION & SYSTEM METRICS
+        # 6. HOW THE SYSTEM WORKS SECTION
         with gr.Column(elem_classes=["glass-card"]):
             gr.HTML("""
-            <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                <i class="lucide-bar-chart-2"></i> System & Model Architecture Metrics
-            </h3>
-            <div class="stats-grid" style="margin-top: 16px;">
-                <div class="stat-card">
-                    <div class="stat-val">TF-IDF</div>
-                    <div class="stat-lbl">Vector Engine</div>
+            <div class="section-hdr-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>How the System Works</span>
+            </div>
+            <div class="timeline-container">
+                <div class="timeline-step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <h4>User Enters Animal Details</h4>
+                        <p>Physical attributes, climate suitability, daily milk yield, and distinct traits are collected through the structured interface.</p>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-val">Cosine</div>
-                    <div class="stat-lbl">Similarity Metric</div>
+                <div class="timeline-step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <h4>TF-IDF Converts Text Into Vectors</h4>
+                        <p>Term Frequency-Inverse Document Frequency transforms raw textual attributes into high-dimensional numerical feature vectors.</p>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-val">41</div>
-                    <div class="stat-lbl">Indexed Breed Profiles</div>
+                <div class="timeline-step">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <h4>Cosine Similarity Analysis</h4>
+                        <p>The mathematical cosine distance evaluates angular alignment between the input vector and all standard breed dossiers in the dataset.</p>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-val">&lt; 50ms</div>
-                    <div class="stat-lbl">Inference Latency</div>
+                <div class="timeline-step">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <h4>Highest Similarity Selection</h4>
+                        <p>Statistical ranking determines the primary breed candidate exhibiting the closest feature affinity score.</p>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-val">Top 3</div>
-                    <div class="stat-lbl">Match Candidates</div>
+                <div class="timeline-step">
+                    <div class="step-num">5</div>
+                    <div class="step-content">
+                        <h4>Top 3 Matches Displayed</h4>
+                        <p>Comprehensive result panels present the best fit along with alternative candidate probabilities and full trait dossiers.</p>
+                    </div>
                 </div>
             </div>
             """)
 
-        # PROJECT OVERVIEW, USERS & STEPS GRID
-        with gr.Row():
-            with gr.Column(scale=6, elem_classes=["glass-card"]):
-                gr.HTML("""
-                <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                    <i class="lucide-bookmark"></i> About the Project
-                </h3>
-                <p style="color: #D8D8D8; font-size: 0.9rem; line-height: 1.6;">
-                    The <strong>AI-Based Cattle & Buffalo Breed Identification System</strong> is an intelligent agriculture decision-support software designed to solve misclassification in livestock husbandry. By matching phenotypic characteristics against verified breed profiles, it enables accurate identification of indigenous Indian cattle and buffalo breeds.
-                </p>
-                <h4 style="color: #A3B18A; margin-top: 16px; margin-bottom: 8px;">Target User Groups:</h4>
-                <ul style="color: #D8D8D8; font-size: 0.85rem; padding-left: 20px; line-height: 1.8;">
-                    <li><strong>Farmers & Breeders:</strong> Identify purebred stock for optimal breeding & market valuation.</li>
-                    <li><strong>Veterinarians & Field Officers:</strong> Diagnose climate suitability and yield potential.</li>
-                    <li><strong>Researchers & Students:</strong> Analyze phenotypic traits of indigenous Indian breeds.</li>
-                    <li><strong>Animal Husbandry Departments:</strong> Maintain digital breed censuses and conservation databases.</li>
-                </ul>
-                """)
-
-            with gr.Column(scale=6, elem_classes=["glass-card"]):
-                gr.HTML("""
-                <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                    <i class="lucide-list-checks"></i> How to Use the App
-                </h3>
-                <div style="margin-top: 16px;">
-                    <div class="timeline-step">
-                        <div class="step-number">1</div>
-                        <div class="step-content">
-                            <h4>Select Animal Type & Ecosystem</h4>
-                            <p>Choose between Cow or Buffalo and set regional climate conditions.</p>
-                        </div>
-                    </div>
-                    <div class="timeline-step">
-                        <div class="step-number">2</div>
-                        <div class="step-content">
-                            <h4>Input Yield Metrics</h4>
-                            <p>Enter average milk yield (liters/lactation) and milk fat percentage.</p>
-                        </div>
-                    </div>
-                    <div class="timeline-step">
-                        <div class="step-number">3</div>
-                        <div class="step-content">
-                            <h4>Describe Morphological Traits</h4>
-                            <p>Provide details on coat color, horn shape, ear structure, and special features.</p>
-                        </div>
-                    </div>
-                    <div class="timeline-step">
-                        <div class="step-number">4</div>
-                        <div class="step-content">
-                            <h4>Run AI Matching</h4>
-                            <p>Click Predict to view the primary match, top 3 candidates, and full profile.</p>
-                        </div>
-                    </div>
-                </div>
-                """)
-
-        # ADVANTAGES & FUTURE ROADMAP
-        with gr.Row():
-            with gr.Column(scale=6, elem_classes=["glass-card"]):
-                gr.HTML("""
-                <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                    <i class="lucide-check-circle-2"></i> System Advantages
-                </h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-zap" style="color:#D4A373;"></i> Fast Vector Comparison
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-shield" style="color:#A3B18A;"></i> High Specificity Matching
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-feather" style="color:#D4A373;"></i> Lightweight Deployment
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-layout" style="color:#A3B18A;"></i> Farmer-Friendly Interface
-                    </div>
-                </div>
-                """)
-
-            with gr.Column(scale=6, elem_classes=["glass-card"]):
-                gr.HTML("""
-                <h3 style="color: #D4A373; margin-top:0; display:flex; align-items:center; gap:8px;">
-                    <i class="lucide-compass"></i> Future Enhancements
-                </h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-image" style="color:#D4A373;"></i> CNN Image Breed Recognition
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-activity" style="color:#A3B18A;"></i> Disease Symptom Checking
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-trending-up" style="color:#D4A373;"></i> Milk Yield Forecast Engine
-                    </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; color: #D8D8D8;">
-                        <i class="lucide-smartphone" style="color:#A3B18A;"></i> Mobile Offline App Integration
-                    </div>
-                </div>
-                """)
-
-        # DEVELOPER FOOTER
-        gr.HTML("""
-        <div class="developer-footer">
-            <h3 style="color: #FFFFFF; margin: 0 0 4px 0;">Developed by Prachi Valecha</h3>
-            <p style="color: #D4A373; font-size: 0.9rem; margin: 0 0 6px 0; font-weight: 500;">
-                Bachelor of Computer Applications (BCA) — Cloud Technology & Information Security
-            </p>
-            <p style="color: #D8D8D8; font-size: 0.85rem; margin: 0;">
-                Panipat Institute of Engineering and Technology (PIET)
-            </p>
+        # 7. ABOUT THE AI MODEL
+        with gr.Column(elem_classes=["glass-card"]):
+            status_badge = "<span class='status-badge-ok'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'><polyline points='20 6 9 17 4 12'></polyline></svg> Loaded Successfully</span>" if MODEL_LOADED else f"<span style='color:#d93838; font-weight:700;'>Error Loading Pickle ({MODEL_STATUS_MSG})</span>"
             
-            <div class="social-links">
-                <a href="#" target="_blank" class="social-btn"><i class="lucide-github"></i> GitHub Profile</a>
-                <a href="#" target="_blank" class="social-btn"><i class="lucide-linkedin"></i> LinkedIn Showcase</a>
-                <a href="#" target="_blank" class="social-btn"><i class="lucide-globe"></i> Portfolio</a>
-                <a href="mailto:developer@example.com" class="social-btn"><i class="lucide-mail"></i> Contact Email</a>
+            gr.HTML(f"""
+            <div class="section-hdr-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                <span>About the AI Model</span>
             </div>
-            
-            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 24px;">
-                © AI-Based Cattle & Buffalo Breed Identification System. Designed for Academic Major Project Exhibition & Professional Portfolio.
-            </p>
-        </div>
-        """)
+            <div style="margin-bottom: 16px;">
+                <strong>Model Status:</strong> {status_badge}
+            </div>
+            <div class="model-info-grid">
+                <div class="model-info-item">
+                    <label>Prediction Technique</label>
+                    <span>TF-IDF Vectorization</span>
+                </div>
+                <div class="model-info-item">
+                    <label>Similarity Algorithm</label>
+                    <span>Cosine Similarity</span>
+                </div>
+                <div class="model-info-item">
+                    <label>Prediction Type</label>
+                    <span>Similarity-Based Breed Identification</span>
+                </div>
+                <div class="model-info-item">
+                    <label>Dataset</label>
+                    <span>Breed Information Dataset</span>
+                </div>
+                <div class="model-info-item">
+                    <label>Output Format</label>
+                    <span>Top Matching Breed with Confidence %</span>
+                </div>
+            </div>
+            """)
 
-        # EVENT BINDINGS
-        predict_btn.click(
-            fn=predict_breed,
-            inputs=[animal_type, climate, utility, milk_yield, milk_fat, physical_traits, special_features],
-            outputs=[error_box, primary_result_out, top3_result_out, detail_result_out]
-        )
+        # 8. FOOTER SECTION
+        with gr.Column(elem_classes=["glass-card", "footer-card"]):
+            gr.HTML("""
+            <div class="footer-dev-name">Developer: Prachi Valecha</div>
+            <div class="footer-dev-title">
+                Bachelor of Computer Applications (BCA)<br>
+                Specialization in Cloud Technology & Information Security<br>
+                Panipat Institute of Engineering and Technology
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com/yourusername" target="_blank" class="btn-social">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                    <span>GitHub Profile</span>
+                </a>
+                <a href="https://linkedin.com/in/yourusername" target="_blank" class="btn-social">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+                    <span>LinkedIn Profile</span>
+                </a>
+            </div>
+            <div class="footer-note">
+                Made with Python, Gradio, TF-IDF and Cosine Similarity.
+            </div>
+            """)
 
-        example_btn.click(
-            fn=load_example,
-            outputs=[animal_type, climate, utility, milk_yield, milk_fat, physical_traits, special_features]
-        )
-
-        clear_btn.click(
-            fn=clear_form,
-            outputs=[
-                animal_type, climate, utility, milk_yield, milk_fat, 
-                physical_traits, special_features, error_box, 
-                primary_result_out, top3_result_out, detail_result_out
-            ]
-        )
-
-# -----------------------------------------------------------------------------
-# 6. APPLICATION ENTRY POINT
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        show_error=True
+    # Event binding
+    predict_btn.click(
+        fn=predict_breed,
+        inputs=[
+            animal_input,
+            climate_input,
+            utility_input,
+            yield_input,
+            fat_input,
+            traits_input,
+            features_input
+        ],
+        outputs=[
+            validation_out,
+            res_summary_out,
+            top3_out,
+            dossier_out,
+            status_out
+        ]
     )
+
+if __name__ == "__main__":
+    demo.launch()
