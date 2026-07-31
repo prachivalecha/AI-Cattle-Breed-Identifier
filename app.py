@@ -193,56 +193,32 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE
+# GRADIO APPLICATION INTERFACE (NATIVE VARIABLES HARD FIX)
 # ==============================================================================
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* Force Light Theme Base */
-:root, body, .gradio-container {
+/* OVERRIDE GRADIO INTERNAL THEMING VARIABLES AT ROOT LEVEL */
+:root, .gradio-container, .gradio-container * {
+    --body-text-color: #0f172a !important;
+    --block-label-text-color: #0f172a !important;
+    --block-title-text-color: #0f172a !important;
+    --block-background-fill: #ffffff !important;
+    --input-background-fill: #ffffff !important;
+    --background-fill-primary: #ffffff !important;
+    --background-fill-secondary: #f8fafc !important;
+    --border-color-primary: #cbd5e1 !important;
     color-scheme: light !important;
+}
+
+/* Base Body & Container Setup */
+body, .gradio-container {
     font-family: 'Inter', sans-serif !important;
-    background-color: #f1f5f9 !important;
+    background-color: #f8fafc !important;
     color: #0f172a !important;
 }
 
-/* OVERRIDE GRADIO INTERNAL DARK WRRAAPERS */
-div[class*="block"], 
-div[class*="cell"], 
-div[class*="form"],
-div[class*="gr-box"],
-div[class*="input"],
-.block, .form, .gr-form, .gr-box {
-    background-color: #ffffff !important;
-    background: #ffffff !important;
-    border-color: #cbd5e1 !important;
-}
-
-/* INPUTS, DROPDOWNS & TEXTAREAS IN CLEAN WHITE WITH DARK TEXT */
-input, select, textarea, 
-.gradio-container input, 
-.gradio-container select, 
-.gradio-container textarea,
-.gradio-container .input-container,
-div[data-testid="textbox"] textarea,
-div[data-testid="dropdown"] input {
-    background-color: #ffffff !important;
-    background: #ffffff !important;
-    color: #000000 !important;
-    border: 2px solid #94a3b8 !important;
-    border-radius: 8px !important;
-    font-weight: 700 !important;
-    font-size: 0.95rem !important;
-}
-
-/* LABELS & HEADINGS */
-label span, .gradio-container label span {
-    color: #0f172a !important;
-    font-weight: 800 !important;
-    font-size: 0.92rem !important;
-}
-
-/* Background Slideshow Layer (Vivid & Clear Photography) */
+/* Background Slideshow Layer */
 .slideshow-bg {
     position: fixed;
     top: 0;
@@ -284,24 +260,59 @@ label span, .gradio-container label span {
 
 @keyframes imageFade {
     0% { opacity: 0; }
-    15% { opacity: 0.55; }  /* Increased Opacity so photo is visible clearly */
-    35% { opacity: 0.55; }
+    15% { opacity: 0.35; }
+    35% { opacity: 0.35; }
     50% { opacity: 0; }
     100% { opacity: 0; }
 }
 
-/* Glassmorphic White Container Cards */
+/* Glassmorphic White Main Cards */
 .glass-card {
-    background: rgba(255, 255, 255, 0.94) !important;
+    background: rgba(255, 255, 255, 0.96) !important;
     border: 1.5px solid #cbd5e1 !important;
     border-radius: 16px !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
     padding: 24px !important;
     margin-bottom: 24px !important;
     position: relative;
     z-index: 10;
 }
 
+/* DROPDOWN & TEXTBOX SPECIFIC CONTAINER FIX */
+.gradio-container .block, 
+.gradio-container .form, 
+.gradio-container .gr-box,
+.gradio-container div[data-testid="dropdown"],
+.gradio-container div[data-testid="textbox"] {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+}
+
+/* FIX LABELS ON DROPDOWN & TEXTBOX */
+.gradio-container label span,
+.gradio-container .block-title,
+.gradio-container span[data-testid="block-info"] {
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    font-size: 0.92rem !important;
+}
+
+/* INPUT TEXT, DROPDOWN SELECT & TEXTAREA */
+.gradio-container input, 
+.gradio-container select, 
+.gradio-container textarea, 
+.gradio-container .single-select,
+.gradio-container .wrap,
+.gradio-container .wrap-inner {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+}
+
+/* Headings */
 .hero-title {
     font-size: 2.2rem !important;
     font-weight: 900 !important;
@@ -312,11 +323,11 @@ label span, .gradio-container label span {
 
 .hero-subtitle {
     font-size: 1rem !important;
-    color: #0f172a !important;
+    color: #334155 !important;
     text-align: center;
     max-width: 750px !important;
     margin: 0 auto 16px auto !important;
-    font-weight: 700 !important;
+    font-weight: 600 !important;
 }
 
 .badges-container {
@@ -361,14 +372,14 @@ label span, .gradio-container label span {
     margin: 0 0 4px 0;
     font-size: 0.95rem;
     color: #14532d !important;
-    font-weight: 900 !important;
+    font-weight: 800 !important;
 }
 
 .guide-item p {
     margin: 0;
     font-size: 0.85rem;
-    color: #0f172a !important;
-    font-weight: 700 !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
 }
 
 .predict-btn {
@@ -395,26 +406,11 @@ label span, .gradio-container label span {
     margin-bottom: 16px;
 }
 
-.result-badge-hdr {
-    color: #15803d !important;
-    font-weight: 800;
-    font-size: 0.9rem;
-}
-
 .predicted-main-title {
     font-size: 2rem;
     font-weight: 900;
     color: #14532d !important;
     margin: 6px 0;
-}
-
-.confidence-label-row {
-    color: #0f172a !important;
-    font-weight: 800;
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.9rem;
-    margin-bottom: 4px;
 }
 
 .progress-bar-bg {
@@ -466,20 +462,9 @@ label span, .gradio-container label span {
 }
 
 .top3-meta {
-    color: #0f172a !important;
-    font-size: 0.88rem;
-    font-weight: 700;
-}
-
-.top3-score-pill {
-    color: #14532d !important;
-    font-weight: 800;
-    background: #dcfce7;
-    padding: 4px 10px;
-    border-radius: 20px;
-    display: inline-block;
-    margin-top: 6px;
-    font-size: 0.82rem;
+    color: #334155 !important;
+    font-size: 0.85rem;
+    font-weight: 600;
 }
 
 .breed-detail-card {
@@ -506,7 +491,7 @@ label span, .gradio-container label span {
     padding: 10px;
     background: #f8fafc !important;
     border-radius: 8px;
-    border: 1px solid #cbd5e1 !important;
+    border: 1px solid #e2e8f0 !important;
 }
 
 .detail-item strong {
@@ -514,7 +499,6 @@ label span, .gradio-container label span {
     display: block;
     font-size: 0.78rem;
     text-transform: uppercase;
-    font-weight: 900;
 }
 
 .detail-item span {
@@ -532,7 +516,7 @@ label span, .gradio-container label span {
 
 .detail-text-block p {
     color: #0f172a !important;
-    font-weight: 700;
+    font-weight: 600;
     margin: 0;
     font-size: 0.9rem;
 }
@@ -594,14 +578,7 @@ label span, .gradio-container label span {
 }
 """
 
-js_force_light = """
-function() {
-    document.documentElement.classList.remove('dark');
-    document.body.classList.remove('dark');
-}
-"""
-
-with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(primary_hue="green"), js=js_force_light) as demo:
+with gr.Blocks(title="AI Breed Identification System") as demo:
     
     # Render Background Slideshow Layer
     gr.HTML("""
@@ -711,7 +688,7 @@ with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(p
             gr.HTML("<div class='section-hdr-title'>📊 AI Identification Results</div>")
             
             res_summary_out = gr.HTML("""
-            <div style="text-align:center; padding: 12px; color: #0f172a; font-weight:800;">
+            <div style="text-align:center; padding: 12px; color: #334155; font-weight:700;">
                 Fill details above and click 'Predict Breed'.
             </div>
             """)
@@ -750,7 +727,7 @@ with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(p
             
             gr.HTML(f"""
             <div class="section-hdr-title">🤖 About the AI Model</div>
-            <p style="margin-bottom: 12px; color:#0f172a; font-weight:800;"><strong>Status:</strong> {status_badge}</p>
+            <p style="margin-bottom: 12px;"><strong>Status:</strong> {status_badge}</p>
             <div class="guide-grid">
                 <div class="guide-item">
                     <h4>Technique</h4>
@@ -771,7 +748,7 @@ with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(p
         with gr.Column(elem_classes=["glass-card", "footer-card"]):
             gr.HTML("""
             <div style="font-size: 1.2rem; font-weight: 900; color: #14532d;">Developer: Prachi Valecha</div>
-            <div style="font-size: 0.88rem; color: #0f172a; font-weight: 800; margin-top: 4px; margin-bottom: 12px;">
+            <div style="font-size: 0.88rem; color: #334155; font-weight: 700; margin-top: 4px; margin-bottom: 12px;">
                 Bachelor of Computer Applications (BCA)<br>
                 Panipat Institute of Engineering and Technology
             </div>
@@ -785,7 +762,7 @@ with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(p
                     LinkedIn Profile
                 </a>
             </div>
-            <div style="font-size: 0.82rem; color: #475569; font-weight: 700;">
+            <div style="font-size: 0.82rem; color: #64748b; font-weight: 600;">
                 Made with Python, Gradio, TF-IDF and Cosine Similarity.
             </div>
             """)
