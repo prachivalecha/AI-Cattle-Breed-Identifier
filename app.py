@@ -20,9 +20,9 @@ def load_model():
         try:
             model_data = joblib.load(MODEL_FILE)
             if isinstance(model_data, dict) and 'tfidf' in model_data and 'tfidf_matrix' in model_data and 'breed_data' in model_data:
-                return model_data, True, "Model loaded successfully from " + MODEL_FILE
+                return model_data, True, "Model loaded successfully."
             else:
-                return None, False, "Loaded file missing required keys."
+                return None, False, "Loaded file missing required keys ('tfidf', 'tfidf_matrix', 'breed_data')."
         except Exception as e:
             return None, False, f"Error loading pickle file: {str(e)}"
     else:
@@ -82,26 +82,45 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         tfidf_mat = model_obj['tfidf_matrix']
         df = model_obj['breed_data']
 
-        combined_user_text = f"Animal: {animal_type}. Climate: {climate}. Utility: {utility}. Milk Yield: {milk_yield} kg/day. Fat: {milk_fat}%. Physical Traits: {physical_traits}. Special Features: {special_features}."
+        # Clean text concatenation for best TF-IDF vector match
+        combined_user_text = f"{animal_type} {climate} {utility} milk yield {milk_yield} kg fat {milk_fat} percent {physical_traits} {special_features}"
         
+        # Transform user text into vector
         user_vector = tfidf_vec.transform([combined_user_text])
         similarities = cosine_similarity(user_vector, tfidf_mat).flatten()
 
-        filtered_indices = np.argsort(similarities)[::-1]
-        if 'Animal' in df.columns or 'Type' in df.columns:
-            type_col = 'Animal' if 'Animal' in df.columns else 'Type'
-            type_matches = [i for i in filtered_indices if str(df.iloc[i][type_col]).strip().lower() == animal_type.strip().lower()]
-            if type_matches:
-                filtered_indices = type_matches
+        # Sort indices by highest similarity
+        top_indices = np.argsort(similarities)[::-1]
 
-        top_indices = filtered_indices[:3]
-        best_idx = top_indices[0]
+        # Filter indices by Animal Type if column exists in DataFrame
+        type_col = None
+        for col in ['Animal', 'Type', 'Animal Type', 'Category']:
+            if col in df.columns:
+                type_col = col
+                break
+        
+        if type_col:
+            filtered = [i for i in top_indices if str(df.iloc[i][type_col]).strip().lower() == animal_type.strip().lower()]
+            if filtered:
+                top_indices = filtered
+
+        top3_indices = top_indices[:3]
+        best_idx = top3_indices[0]
         best_score = float(similarities[best_idx])
         score_pct = round(best_score * 100, 1)
 
+        # Retrieve breed details flexibly
         best_row = df.iloc[best_idx]
-        best_breed_name = best_row.get('Breed', best_row.get('Breed Name', f'Breed #{best_idx+1}'))
+        
+        breed_col = None
+        for col in ['Breed', 'Breed Name', 'Name', 'Breed_Name']:
+            if col in df.columns:
+                breed_col = col
+                break
+        
+        best_breed_name = str(best_row[breed_col]) if breed_col else f"Breed #{best_idx+1}"
 
+        # Result Summary HTML
         result_summary_html = f"""
         <div class="result-success-box">
             <div class="result-badge-hdr">
@@ -120,10 +139,11 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         </div>
         """
 
+        # Top 3 Candidates HTML
         top3_html = "<div class='top3-grid'>"
-        for rank, idx in enumerate(top_indices, 1):
+        for rank, idx in enumerate(top3_indices, 1):
             row = df.iloc[idx]
-            b_name = row.get('Breed', row.get('Breed Name', f'Breed #{idx+1}'))
+            b_name = str(row[breed_col]) if breed_col else f"Breed #{idx+1}"
             b_score = round(float(similarities[idx]) * 100, 1)
             b_type = row.get('Animal', row.get('Type', animal_type))
             b_origin = row.get('Origin', row.get('Region', 'Native India'))
@@ -141,6 +161,7 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
             """
         top3_html += "</div>"
 
+        # Safe extraction for Breed Dossier
         b_climate = best_row.get('Climate', best_row.get('Climate Suitability', climate))
         b_yield = best_row.get('Milk Yield', best_row.get('Average Milk Yield', f"{milk_yield} kg/day"))
         b_fat = best_row.get('Milk Fat', best_row.get('Fat %', f"{milk_fat}%"))
@@ -189,29 +210,16 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         return "", result_summary_html, top3_html, breed_info_html, "Evaluated."
 
     except Exception as ex:
-        err_msg = f"<div class='validation-card-error'><div class='val-header'><span>⚠️ Error</span></div><p>{str(ex)}</p></div>"
+        err_msg = f"<div class='validation-card-error'><div class='val-header'><span>⚠️ Prediction Error</span></div><p>{str(ex)}</p></div>"
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE (NATIVE VARIABLES HARD FIX)
+# GRADIO APPLICATION INTERFACE
 # ==============================================================================
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* OVERRIDE GRADIO INTERNAL THEMING VARIABLES AT ROOT LEVEL */
-:root, .gradio-container, .gradio-container * {
-    --body-text-color: #0f172a !important;
-    --block-label-text-color: #0f172a !important;
-    --block-title-text-color: #0f172a !important;
-    --block-background-fill: #ffffff !important;
-    --input-background-fill: #ffffff !important;
-    --background-fill-primary: #ffffff !important;
-    --background-fill-secondary: #f8fafc !important;
-    --border-color-primary: #cbd5e1 !important;
-    color-scheme: light !important;
-}
-
-/* Base Body & Container Setup */
+/* Global Canvas Setup */
 body, .gradio-container {
     font-family: 'Inter', sans-serif !important;
     background-color: #f8fafc !important;
@@ -266,10 +274,10 @@ body, .gradio-container {
     100% { opacity: 0; }
 }
 
-/* Glassmorphic White Main Cards */
+/* Glassmorphic Container Cards */
 .glass-card {
-    background: rgba(255, 255, 255, 0.96) !important;
-    border: 1.5px solid #cbd5e1 !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 16px !important;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
     padding: 24px !important;
@@ -278,41 +286,25 @@ body, .gradio-container {
     z-index: 10;
 }
 
-/* DROPDOWN & TEXTBOX SPECIFIC CONTAINER FIX */
-.gradio-container .block, 
-.gradio-container .form, 
-.gradio-container .gr-box,
-.gradio-container div[data-testid="dropdown"],
-.gradio-container div[data-testid="textbox"] {
+/* Form Controls */
+.gradio-container input, 
+.gradio-container select, 
+.gradio-container textarea, 
+.gradio-container .input-container {
     background-color: #ffffff !important;
-    background: #ffffff !important;
-    border: 1.5px solid #cbd5e1 !important;
-    border-radius: 10px !important;
+    color: #0f172a !important;
+    border: 1.5px solid #94a3b8 !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
 }
 
-/* FIX LABELS ON DROPDOWN & TEXTBOX */
-.gradio-container label span,
-.gradio-container .block-title,
-.gradio-container span[data-testid="block-info"] {
+.gradio-container label span {
     color: #0f172a !important;
     font-weight: 800 !important;
     font-size: 0.92rem !important;
 }
 
-/* INPUT TEXT, DROPDOWN SELECT & TEXTAREA */
-.gradio-container input, 
-.gradio-container select, 
-.gradio-container textarea, 
-.gradio-container .single-select,
-.gradio-container .wrap,
-.gradio-container .wrap-inner {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    font-weight: 700 !important;
-    font-size: 0.95rem !important;
-}
-
-/* Headings */
+/* Typography & Headings */
 .hero-title {
     font-size: 2.2rem !important;
     font-weight: 900 !important;
@@ -396,7 +388,7 @@ body, .gradio-container {
     margin-top: 12px !important;
 }
 
-/* Prediction Results Styling */
+/* Results Formatting */
 .result-success-box {
     background: #f0fdf4 !important;
     border: 2px solid #86efac !important;
@@ -465,6 +457,17 @@ body, .gradio-container {
     color: #334155 !important;
     font-size: 0.85rem;
     font-weight: 600;
+}
+
+.top3-score-pill {
+    color: #14532d !important;
+    font-weight: 800;
+    background: #dcfce7;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.82rem;
 }
 
 .breed-detail-card {
@@ -575,6 +578,20 @@ body, .gradio-container {
 .footer-social-btn:hover {
     background: #15803d;
     color: #ffffff !important;
+}
+
+.validation-card-error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+.val-header {
+    color: #991b1b;
+    font-weight: 800;
+    margin-bottom: 4px;
 }
 """
 
