@@ -109,8 +109,8 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
             </div>
             <div class="predicted-main-title" style="color: #14532d !important; font-size: 2.2rem; font-weight: 900;">{best_breed_name}</div>
             <div class="confidence-container">
-                <div class="confidence-label-row" style="color: #020617 !important; font-weight: 800; display: flex; justify-content: space-between;">
-                    <span style="color: #020617 !important;">AI Match Confidence</span>
+                <div class="confidence-label-row" style="color: #000000 !important; font-weight: 800; display: flex; justify-content: space-between;">
+                    <span style="color: #000000 !important;">AI Match Confidence</span>
                     <span style="color: #15803d !important;">{score_pct}% Match</span>
                 </div>
                 <div class="progress-bar-bg">
@@ -131,10 +131,10 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
             top3_html += f"""
             <div class="top3-card {'top3-card-first' if rank==1 else ''}">
                 <div class="top3-rank-badge" style="color: #15803d !important; font-weight: 900; font-size: 0.82rem; text-transform: uppercase;">Candidate #{rank}</div>
-                <div class="top3-breed-title" style="color: #020617 !important; font-weight: 900; font-size: 1.15rem; margin: 4px 0;">{b_name}</div>
-                <div class="top3-meta" style="color: #020617 !important; font-weight: 700;">
-                    <span style="color: #020617 !important; display: block;"><strong style="color: #15803d !important;">Type:</strong> {b_type}</span>
-                    <span style="color: #020617 !important; display: block;"><strong style="color: #15803d !important;">Origin:</strong> {b_origin}</span>
+                <div class="top3-breed-title" style="color: #000000 !important; font-weight: 900; font-size: 1.15rem; margin: 4px 0;">{b_name}</div>
+                <div class="top3-meta" style="color: #000000 !important; font-weight: 700;">
+                    <span style="color: #000000 !important; display: block;"><strong style="color: #15803d !important;">Type:</strong> {b_type}</span>
+                    <span style="color: #000000 !important; display: block;"><strong style="color: #15803d !important;">Origin:</strong> {b_origin}</span>
                 </div>
                 <div class="top3-score-pill" style="color: #14532d !important; font-weight: 800; background: #dcfce7; padding: 4px 10px; border-radius: 20px; display: inline-block; margin-top: 6px;">{b_score}% Similarity</div>
             </div>
@@ -157,31 +157,31 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
             </div>
             <div class="detail-grid">
                 <div class="detail-item">
-                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Region of Origin</strong><span style="color: #020617 !important; font-weight: 800;">{b_origin}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Region of Origin</strong><span style="color: #000000 !important; font-weight: 800;">{b_origin}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Climate Suitability</strong><span style="color: #020617 !important; font-weight: 800;">{b_climate}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Climate Suitability</strong><span style="color: #000000 !important; font-weight: 800;">{b_climate}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Average Milk Yield</strong><span style="color: #020617 !important; font-weight: 800;">{b_yield}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Average Milk Yield</strong><span style="color: #000000 !important; font-weight: 800;">{b_yield}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Milk Fat Content</strong><span style="color: #020617 !important; font-weight: 800;">{b_fat}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Milk Fat Content</strong><span style="color: #000000 !important; font-weight: 800;">{b_fat}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Primary Utility</strong><span style="color: #020617 !important; font-weight: 800;">{b_utility}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Primary Utility</strong><span style="color: #000000 !important; font-weight: 800;">{b_utility}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Crossbreeding Value</strong><span style="color: #020617 !important; font-weight: 800;">{b_cross}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block;">Crossbreeding Value</strong><span style="color: #000000 !important; font-weight: 800;">{b_cross}</span></div>
                 </div>
             </div>
             <div class="detail-text-block">
                 <strong style="color: #15803d !important; font-weight: 900; display: block; margin-bottom: 4px;">Physical Traits:</strong>
-                <p style="color: #020617 !important; font-weight: 700; margin: 0;">{b_traits}</p>
+                <p style="color: #000000 !important; font-weight: 700; margin: 0;">{b_traits}</p>
             </div>
             <div class="detail-text-block" style="margin-top: 10px;">
                 <strong style="color: #15803d !important; font-weight: 900; display: block; margin-bottom: 4px;">Special Distinctive Features:</strong>
-                <p style="color: #020617 !important; font-weight: 700; margin: 0;">{b_special}</p>
+                <p style="color: #000000 !important; font-weight: 700; margin: 0;">{b_special}</p>
             </div>
         </div>
         """
@@ -193,20 +193,23 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE (FIXED DARK BOXES & HIGH CONTRAST)
+# GRADIO APPLICATION INTERFACE (STRICT FORCE LIGHT THEME)
 # ==============================================================================
 custom_css = """
 /* Import Clean Font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* Force Page Canvas */
-html, body, .gradio-container, .main, div[class*="app"] {
+/* DISABLE DARK MODE ENTIRELY AT THE ROOT LEVEL */
+:root, html, body {
+    color-scheme: light !important;
     background-color: #f8fafc !important;
     font-family: 'Inter', sans-serif !important;
-    color: #020617 !important;
+    color: #000000 !important;
 }
 
-/* FIX DARK BOXES: Hard override every possible Gradio input container wrapper */
+/* OVERRIDE GRADIO INTERNAL DARK CONTAINERS */
+.gradio-container, 
+.gradio-container *, 
 div[data-testid="block"], 
 div[data-testid="cell"], 
 div[data-testid="textbox"],
@@ -220,22 +223,28 @@ div[class*="block"],
 div[class*="gr-box"],
 div[class*="gradio-dropdown"],
 div[class*="gradio-textbox"] {
-    background: #ffffff !important;
     background-color: #ffffff !important;
     border-color: #cbd5e1 !important;
-    box-shadow: none !important;
 }
 
-/* HARD OVERRIDE FOR ALL LABELS & INPUT TEXT */
+/* INPUT FIELD OVERRIDES */
+input, select, textarea, .gr-input, .gr-select, 
+.gradio-container input, .gradio-container select, .gradio-container textarea {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+}
+
+/* ALL LABELS & TEXT IN PURE BLACK */
 label, 
 .gradio-container label, 
 span[data-testid="block-info"], 
 .gr-input-label, 
-span, 
-p, 
-div,
-h1, h2, h3, h4, h5, h6 {
-    color: #020617 !important;
+span, p, div, h1, h2, h3, h4, h5, h6 {
+    color: #000000 !important;
     font-weight: 700 !important;
     opacity: 1 !important;
 }
@@ -244,21 +253,6 @@ h1, h2, h3, h4, h5, h6 {
 .hero-title, .section-hdr-title, .guide-item h4, .detail-header h3 {
     color: #14532d !important;
     font-weight: 900 !important;
-}
-
-/* Form Inputs, Dropdowns & Textareas Styling */
-input, select, textarea, .gr-input, .gr-select, 
-.gradio-container input, .gradio-container select, .gradio-container textarea {
-    color: #020617 !important;
-    background-color: #ffffff !important;
-    border: 2px solid #cbd5e1 !important;
-    border-radius: 10px !important;
-    font-size: 0.95rem !important;
-    font-weight: 700 !important;
-}
-
-input:focus, select:focus, textarea:focus {
-    border-color: #16a34a !important;
 }
 
 /* Background Slideshow Layer */
@@ -311,7 +305,7 @@ input:focus, select:focus, textarea:focus {
 
 /* Glassmorphic Cards Overlay */
 .glass-card {
-    background: rgba(255, 255, 255, 0.95) !important;
+    background: rgba(255, 255, 255, 0.96) !important;
     border: 1.5px solid #cbd5e1 !important;
     border-radius: 18px !important;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08) !important;
@@ -335,7 +329,7 @@ input:focus, select:focus, textarea:focus {
 
 .hero-subtitle {
     font-size: 1.05rem !important;
-    color: #020617 !important;
+    color: #000000 !important;
     max-width: 750px !important;
     margin: 0 auto 16px auto !important;
     font-weight: 700 !important;
@@ -389,7 +383,7 @@ input:focus, select:focus, textarea:focus {
 .guide-item p {
     margin: 0;
     font-size: 0.85rem;
-    color: #020617 !important;
+    color: #000000 !important;
     font-weight: 700 !important;
 }
 
@@ -542,7 +536,7 @@ input:focus, select:focus, textarea:focus {
 }
 """
 
-with gr.Blocks(title="AI Breed Identification System") as demo:
+with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Soft()) as demo:
     
     # Render Background Slideshow Layer
     gr.HTML("""
@@ -652,7 +646,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             gr.HTML("<div class='section-hdr-title'>📊 AI Identification Results</div>")
             
             res_summary_out = gr.HTML("""
-            <div style="text-align:center; padding: 16px; color: #020617 !important; font-weight:800;">
+            <div style="text-align:center; padding: 16px; color: #000000 !important; font-weight:800;">
                 Fill details above and click 'Predict Breed'.
             </div>
             """)
@@ -668,19 +662,19 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             <div>
                 <div class="timeline-step">
                     <div class="step-num">1</div>
-                    <div style="color: #020617 !important; font-weight: 800;"><strong style="color: #14532d !important;">Input:</strong> User enters animal parameters.</div>
+                    <div style="color: #000000 !important; font-weight: 800;"><strong style="color: #14532d !important;">Input:</strong> User enters animal parameters.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-num">2</div>
-                    <div style="color: #020617 !important; font-weight: 800;"><strong style="color: #14532d !important;">TF-IDF Vectorization:</strong> Converts input into mathematical vectors.</div>
+                    <div style="color: #000000 !important; font-weight: 800;"><strong style="color: #14532d !important;">TF-IDF Vectorization:</strong> Converts input into mathematical vectors.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-num">3</div>
-                    <div style="color: #020617 !important; font-weight: 800;"><strong style="color: #14532d !important;">Cosine Similarity:</strong> Calculates distance against dataset breeds.</div>
+                    <div style="color: #000000 !important; font-weight: 800;"><strong style="color: #14532d !important;">Cosine Similarity:</strong> Calculates distance against dataset breeds.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-num">4</div>
-                    <div style="color: #020617 !important; font-weight: 800;"><strong style="color: #14532d !important;">Output:</strong> Top 3 matched breeds displayed with percentage match.</div>
+                    <div style="color: #000000 !important; font-weight: 800;"><strong style="color: #14532d !important;">Output:</strong> Top 3 matched breeds displayed with percentage match.</div>
                 </div>
             </div>
             """)
@@ -691,11 +685,11 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             
             gr.HTML(f"""
             <div class="section-hdr-title">🤖 About the AI Model</div>
-            <p style="color:#020617 !important; font-weight:800;"><strong>Status:</strong> {status_badge}</p>
+            <p style="color:#000000 !important; font-weight:800;"><strong>Status:</strong> {status_badge}</p>
             <div class="model-info-grid">
-                <div class="model-info-item"><label style="color:#15803d !important; font-weight:900;">Technique</label><span style="color:#020617 !important; font-weight:800; display:block;">TF-IDF Vectorization</span></div>
-                <div class="model-info-item"><label style="color:#15803d !important; font-weight:900;">Algorithm</label><span style="color:#020617 !important; font-weight:800; display:block;">Cosine Similarity</span></div>
-                <div class="model-info-item"><label style="color:#15803d !important; font-weight:900;">Type</label><span style="color:#020617 !important; font-weight:800; display:block;">Content-based Identification</span></div>
+                <div class="model-info-item"><label style="color:#15803d !important; font-weight:900;">Technique</label><span style="color:#000000 !important; font-weight:800; display:block;">TF-IDF Vectorization</span></div>
+                <div class="model-info-item"><label style="color:#15803d !important; font-weight:900;">Algorithm</label><span style="color:#000000 !important; font-weight:800; display:block;">Cosine Similarity</span></div>
+                <div class="model-info-item"><label style="color:#15803d !important; font-weight:900;">Type</label><span style="color:#000000 !important; font-weight:800; display:block;">Content-based Identification</span></div>
             </div>
             """)
 
@@ -703,7 +697,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
         with gr.Column(elem_classes=["glass-card", "footer-card"]):
             gr.HTML("""
             <div style="font-size: 1.25rem; font-weight: 900; color: #14532d !important;">Developer: Prachi Valecha</div>
-            <div style="font-size: 0.9rem; color: #020617 !important; font-weight: 800; margin-top: 4px; margin-bottom: 12px;">
+            <div style="font-size: 0.9rem; color: #000000 !important; font-weight: 800; margin-top: 4px; margin-bottom: 12px;">
                 Bachelor of Computer Applications (BCA)<br>
                 Panipat Institute of Engineering and Technology
             </div>
