@@ -7,35 +7,26 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import gradio as gr
 
-# Suppress unpickling version warnings and Gradio deprecation notices
+# Suppress version & deprecation warnings
 warnings.filterwarnings("ignore")
 
 # ==============================================================================
-# MODEL LOADING & FALLBACK HANDLER
+# MODEL LOADING
 # ==============================================================================
 MODEL_FILE = "breed_prediction_model.pkl"
 
 def load_model():
-    """
-    Attempts to load the pre-trained TF-IDF model dictionary.
-    Expected structure of loaded dict:
-    {
-        'tfidf': TfidfVectorizer instance,
-        'tfidf_matrix': scipy sparse matrix or numpy array,
-        'breed_data': pandas DataFrame containing breed records
-    }
-    """
     if os.path.exists(MODEL_FILE):
         try:
             model_data = joblib.load(MODEL_FILE)
             if isinstance(model_data, dict) and 'tfidf' in model_data and 'tfidf_matrix' in model_data and 'breed_data' in model_data:
                 return model_data, True, "Model loaded successfully from " + MODEL_FILE
             else:
-                return None, False, "Loaded file does not contain required keys ('tfidf', 'tfidf_matrix', 'breed_data')."
+                return None, False, "Loaded file missing required keys."
         except Exception as e:
             return None, False, f"Error loading pickle file: {str(e)}"
     else:
-        return None, False, f"Model file '{MODEL_FILE}' not found. Please place it in the application directory."
+        return None, False, f"Model file '{MODEL_FILE}' not found."
 
 model_obj, MODEL_LOADED, MODEL_STATUS_MSG = load_model()
 
@@ -57,14 +48,14 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
     try:
         milk_yield = float(milk_yield_str)
         if milk_yield <= 0:
-            errors.append("Average Milk Yield must be a positive number greater than 0.")
+            errors.append("Average Milk Yield must be greater than 0.")
     except (ValueError, TypeError):
         errors.append("Please enter a valid numeric value for Average Milk Yield.")
 
     try:
         milk_fat = float(milk_fat_str)
         if milk_fat <= 0 or milk_fat > 25:
-            errors.append("Milk Fat percentage must be a valid positive number (e.g., between 1% and 20%).")
+            errors.append("Milk Fat percentage must be between 1% and 25%.")
     except (ValueError, TypeError):
         errors.append("Please enter a valid numeric value for Milk Fat %.")
 
@@ -72,18 +63,18 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         errors.append("Please provide descriptive Physical Traits (minimum 3 characters).")
 
     if not special_features or len(special_features.strip()) < 3:
-        errors.append("Please provide descriptive Special Features or behavior.")
+        errors.append("Please provide descriptive Special Features.")
 
     if errors:
         error_html = "<div class='validation-card-error'>"
-        error_html += "<div class='val-header'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#b91c1c' stroke-width='2.5'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'></path><line x1='12' y1='9' x2='12' y2='13'></line><line x1='12' y1='17' x2='12.01' y2='17'></line></svg><span>Input Validation Notice</span></div><ul>"
+        error_html += "<div class='val-header'><span>⚠️ Input Validation Notice</span></div><ul>"
         for err in errors:
             error_html += f"<li>{err}</li>"
         error_html += "</ul></div>"
         return error_html, "", "", "", ""
 
     if not MODEL_LOADED:
-        error_html = f"<div class='validation-card-error'><div class='val-header'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#b91c1c' stroke-width='2.5'><circle cx='12' cy='12' r='10'></circle><line x1='12' y1='8' x2='12' y2='12'></line><line x1='12' y1='16' x2='12.01' y2='16'></line></svg><span>Model Initialization Error</span></div><p>{MODEL_STATUS_MSG}</p></div>"
+        error_html = f"<div class='validation-card-error'><div class='val-header'><span>⚠️ Model Error</span></div><p>{MODEL_STATUS_MSG}</p></div>"
         return error_html, "", "", "", ""
 
     try:
@@ -114,14 +105,13 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         result_summary_html = f"""
         <div class="result-success-box">
             <div class="result-badge-hdr">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                <span>Prediction Successful</span>
+                <span>✓ Prediction Successful</span>
             </div>
             <div class="predicted-main-title">{best_breed_name}</div>
             <div class="confidence-container">
                 <div class="confidence-label-row">
-                    <span class="conf-title">AI Similarity Confidence</span>
-                    <span class="conf-value">{score_pct}% Match</span>
+                    <span>AI Match Confidence</span>
+                    <span>{score_pct}% Match</span>
                 </div>
                 <div class="progress-bar-bg">
                     <div class="progress-bar-fill" style="width: {score_pct}%;"></div>
@@ -140,7 +130,7 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
             
             top3_html += f"""
             <div class="top3-card {'top3-card-first' if rank==1 else ''}">
-                <div class="top3-rank-badge">#{rank} Candidate</div>
+                <div class="top3-rank-badge">Candidate #{rank}</div>
                 <div class="top3-breed-title">{b_name}</div>
                 <div class="top3-meta">
                     <span><strong>Type:</strong> {b_type}</span>
@@ -155,7 +145,7 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         b_yield = best_row.get('Milk Yield', best_row.get('Average Milk Yield', f"{milk_yield} kg/day"))
         b_fat = best_row.get('Milk Fat', best_row.get('Fat %', f"{milk_fat}%"))
         b_utility = best_row.get('Utility', utility)
-        b_cross = best_row.get('Crossbreeding', best_row.get('Crossbreeding Programs', 'Extensively used in indigenous improvement programs.'))
+        b_cross = best_row.get('Crossbreeding', best_row.get('Crossbreeding Programs', 'Extensively used in indigenous programs.'))
         b_traits = best_row.get('Physical Traits', physical_traits)
         b_special = best_row.get('Special Features', special_features)
         b_origin = best_row.get('Origin', best_row.get('Region of Origin', 'Pan-India native tract'))
@@ -163,32 +153,25 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         breed_info_html = f"""
         <div class="breed-detail-card">
             <div class="detail-header">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                 <h3>Comprehensive Breed Dossier: {best_breed_name}</h3>
             </div>
             <div class="detail-grid">
                 <div class="detail-item">
-                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>
                     <div class="d-content"><strong>Region of Origin</strong><span>{b_origin}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg></div>
                     <div class="d-content"><strong>Climate Suitability</strong><span>{b_climate}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></div>
                     <div class="d-content"><strong>Average Milk Yield</strong><span>{b_yield}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg></div>
                     <div class="d-content"><strong>Milk Fat Content</strong><span>{b_fat}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg></div>
                     <div class="d-content"><strong>Primary Utility</strong><span>{b_utility}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
                     <div class="d-content"><strong>Crossbreeding Value</strong><span>{b_cross}</span></div>
                 </div>
             </div>
@@ -203,67 +186,77 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         </div>
         """
 
-        return "", result_summary_html, top3_html, breed_info_html, "Section successfully evaluated."
+        return "", result_summary_html, top3_html, breed_info_html, "Evaluated."
 
     except Exception as ex:
-        err_msg = f"<div class='validation-card-error'><div class='val-header'><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#b91c1c' stroke-width='2.5'><circle cx='12' cy='12' r='10'></circle><line x1='15' y1='9' x2='9' y2='15'></line><line x1='9' y1='9' x2='15' y2='15'></line></svg><span>Runtime Processing Error</span></div><p>{str(ex)}</p></div>"
+        err_msg = f"<div class='validation-card-error'><div class='val-header'><span>⚠️ Error</span></div><p>{str(ex)}</p></div>"
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE (CLEAN ULTRA-HIGH CONTRAST THEME)
+# GRADIO APPLICATION INTERFACE (TOTAL OVERRIDE CSS)
 # ==============================================================================
 custom_css = """
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@600;700;800&family=Outfit:wght@600;700;800&display=swap');
+/* Import Clean Font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* Master Reset & Root Canvas Fix */
-html, body {
-    background-color: #f1f5f9 !important;
-    font-family: 'Inter', -apple-system, sans-serif !important;
+/* Force Full Window Canvas & Background */
+html, body, .gradio-container, .main, div[class*="app"] {
+    background-color: #f8fafc !important;
+    font-family: 'Inter', sans-serif !important;
     color: #0f172a !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    min-height: 100vh;
 }
 
-/* Force Gradio wrapper transparency so full-screen background slideshow works */
-.gradio-container, .gradio-container > .main, div[class*="app"], .gradio-app, .gradio-container > div {
-    background: transparent !important;
-    background-color: transparent !important;
+/* FIX DARK BOXES: Override all internal Gradio component containers */
+div[data-testid="block"], 
+div[data-testid="cell"], 
+.gr-box, 
+.gr-form, 
+.form, 
+.block, 
+div[class*="form"],
+div[class*="block"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
 }
 
-/* HARDCODED ULTRA-BLACK CONTRAST FOR ALL GRADIO LABELS & INPUT TEXT */
-label, .gradio-container label, .gr-form label, span.text-gray-500, .gr-input-label, span, p, h1, h2, h3, h4, h5 {
-    color: #020617 !important;
-    font-weight: 800 !important;
+/* FIX TEXT VISIBILITY: Make labels dark black and high contrast */
+label, 
+.gradio-container label, 
+span[data-testid="block-info"], 
+.gr-input-label, 
+span, 
+p, 
+h1, h2, h3, h4 {
+    color: #0f172a !important;
+    font-weight: 700 !important;
     opacity: 1 !important;
+    background: transparent !important;
 }
 
-/* Form Inputs / Textareas / Dropdowns Hard Styling */
-input, select, textarea, .gr-input, .gr-select, .gr-box, div[data-testid="textbox"], div[data-testid="dropdown"] {
-    color: #020617 !important;
+/* Inputs, Dropdowns and Textareas */
+input, select, textarea, .gr-input, .gr-select {
+    color: #0f172a !important;
     background-color: #ffffff !important;
     border: 2px solid #cbd5e1 !important;
-    border-radius: 12px !important;
-    font-size: 1rem !important;
-    font-weight: 700 !important;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+    border-radius: 10px !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
 }
 
 input:focus, select:focus, textarea:focus {
-    border-color: #15803d !important;
-    box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.2) !important;
+    border-color: #16a34a !important;
 }
 
-/* Fullscreen Crossfade Background Slideshow */
+/* Slideshow Container */
 .slideshow-bg {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: -2;
-    overflow: hidden;
+    z-index: 0;
+    pointer-events: none;
 }
 
 .slideshow-slide {
@@ -275,8 +268,7 @@ input:focus, select:focus, textarea:focus {
     background-size: cover;
     background-position: center;
     opacity: 0;
-    animation: imageFade 24s infinite ease-in-out;
-    filter: brightness(0.9) contrast(1.05);
+    animation: imageFade 20s infinite ease-in-out;
 }
 
 .slideshow-slide:nth-child(1) {
@@ -284,260 +276,140 @@ input:focus, select:focus, textarea:focus {
     animation-delay: 0s;
 }
 .slideshow-slide:nth-child(2) {
-    background-image: url('https://images.unsplash.com/photo-1594042831518-a15d2a9009eb?q=80&w=1920&auto=format&fit=crop');
-    animation-delay: 6s;
+    background-image: url('https://images.unsplash.com/photo-1500595046743-cd271d694d30?q=80&w=1920&auto=format&fit=crop');
+    animation-delay: 5s;
 }
 .slideshow-slide:nth-child(3) {
     background-image: url('https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?q=80&w=1920&auto=format&fit=crop');
-    animation-delay: 12s;
+    animation-delay: 10s;
 }
 .slideshow-slide:nth-child(4) {
     background-image: url('https://images.unsplash.com/photo-1527153857715-3908f2bae5e8?q=80&w=1920&auto=format&fit=crop');
-    animation-delay: 18s;
+    animation-delay: 15s;
 }
 
 @keyframes imageFade {
-    0% { opacity: 0; transform: scale(1.0); }
-    10% { opacity: 0.85; }
-    25% { opacity: 0.85; }
-    35% { opacity: 0; transform: scale(1.03); }
+    0% { opacity: 0; }
+    15% { opacity: 0.35; }
+    35% { opacity: 0.35; }
+    50% { opacity: 0; }
     100% { opacity: 0; }
 }
 
-.slideshow-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
-    background: rgba(248, 250, 252, 0.65);
-    backdrop-filter: blur(4px);
-}
-
-/* Clean Solid White Cards (No Washout / Perfect Readability) */
+/* Glassmorphic White Cards */
 .glass-card {
-    background: #ffffff !important;
+    background: rgba(255, 255, 255, 0.92) !important;
     border: 1px solid #e2e8f0 !important;
-    border-radius: 20px !important;
-    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1) !important;
-    padding: 30px !important;
-    margin-bottom: 28px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08) !important;
+    padding: 24px !important;
+    margin-bottom: 24px !important;
+    position: relative;
+    z-index: 10;
 }
 
-/* Hero Section */
 .hero-wrapper {
     text-align: center;
     background: #ffffff !important;
 }
 
-.hero-logo-box {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 64px;
-    height: 64px;
-    background: linear-gradient(135deg, #166534 0%, #15803d 100%);
-    border-radius: 18px;
-    margin-bottom: 16px;
-    box-shadow: 0 8px 18px rgba(22, 101, 52, 0.3);
-}
-
 .hero-title {
-    font-family: 'Outfit', sans-serif !important;
-    font-size: 2.5rem !important;
+    font-size: 2.2rem !important;
     font-weight: 900 !important;
-    color: #14532d !important;
-    margin-bottom: 12px !important;
+    color: #15803d !important;
+    margin-bottom: 8px !important;
 }
 
 .hero-subtitle {
-    font-size: 1.1rem !important;
+    font-size: 1.05rem !important;
     color: #334155 !important;
     max-width: 750px !important;
-    margin: 0 auto 24px auto !important;
-    font-weight: 600 !important;
+    margin: 0 auto 16px auto !important;
 }
 
 .badges-container {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
+    padding: 6px 14px;
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
     border-radius: 50px;
-    font-size: 0.88rem;
-    font-weight: 800;
+    font-size: 0.85rem;
+    font-weight: 700;
     color: #166534;
 }
 
-/* Section Titles */
 .section-hdr-title {
-    font-family: 'Manrope', sans-serif !important;
-    font-size: 1.4rem !important;
+    font-size: 1.3rem !important;
     font-weight: 800 !important;
-    color: #14532d !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-    margin-bottom: 20px !important;
+    color: #15803d !important;
+    margin-bottom: 16px !important;
 }
 
-/* Guidance Section Grid */
 .guide-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
 }
 
 .guide-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 16px;
+    padding: 14px;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 14px;
-}
-
-.guide-icon-box {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    background: #dcfce7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.guide-text h4 {
-    margin: 0 0 4px 0;
-    font-size: 0.98rem;
-    font-weight: 800;
-    color: #14532d;
-}
-
-.guide-text p {
-    margin: 0;
-    font-size: 0.88rem;
-    color: #334155;
-    font-weight: 600;
-}
-
-.info-alert-banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 18px;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
     border-radius: 12px;
-    color: #1e40af;
-    font-size: 0.92rem;
-    font-weight: 800;
 }
 
-/* Primary Action Button */
+.guide-item h4 {
+    margin: 0 0 4px 0;
+    font-size: 0.95rem;
+    color: #15803d;
+}
+
+.guide-item p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #334155;
+}
+
 .predict-btn {
-    background: linear-gradient(135deg, #15803d 0%, #166534 100%) !important;
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
     color: #ffffff !important;
-    font-family: 'Outfit', sans-serif !important;
-    font-size: 1.15rem !important;
+    font-size: 1.1rem !important;
     font-weight: 800 !important;
-    border-radius: 14px !important;
-    padding: 16px 32px !important;
+    border-radius: 12px !important;
+    padding: 14px 28px !important;
     border: none !important;
-    box-shadow: 0 8px 20px rgba(21, 128, 61, 0.3) !important;
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.3) !important;
     cursor: pointer !important;
     width: 100% !important;
     margin-top: 12px !important;
 }
 
-.predict-btn:hover {
-    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
-}
-
-/* Validation and Error Display */
-.validation-card-error {
-    background: #fef2f2;
-    border: 2px solid #fca5a5;
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 20px;
-}
-
-.val-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 800;
-    color: #991b1b;
-    margin-bottom: 6px;
-}
-
-.validation-card-error ul {
-    margin: 4px 0 0 20px;
-    padding: 0;
-    color: #b91c1c;
-    font-size: 0.92rem;
-    font-weight: 700;
-}
-
-/* Results Formatting */
 .result-success-box {
     background: #f0fdf4;
     border: 2px solid #86efac;
-    border-radius: 16px;
-    padding: 24px;
+    border-radius: 14px;
+    padding: 20px;
     text-align: center;
-    margin-bottom: 20px;
-}
-
-.result-badge-hdr {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: #15803d;
-    font-weight: 800;
-    font-size: 0.9rem;
-    text-transform: uppercase;
+    margin-bottom: 16px;
 }
 
 .predicted-main-title {
-    font-family: 'Outfit', sans-serif;
-    font-size: 2.2rem;
+    font-size: 2rem;
     font-weight: 900;
-    color: #14532d;
-    margin-bottom: 12px;
-}
-
-.confidence-container {
-    max-width: 450px;
-    margin: 0 auto;
-}
-
-.confidence-label-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.9rem;
-    font-weight: 800;
-    color: #166534;
-    margin-bottom: 6px;
+    color: #15803d;
+    margin-bottom: 10px;
 }
 
 .progress-bar-bg {
     width: 100%;
-    height: 12px;
+    height: 10px;
     background: #ffffff;
     border-radius: 20px;
     border: 1px solid #bbf7d0;
@@ -546,279 +418,96 @@ input:focus, select:focus, textarea:focus {
 
 .progress-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, #22c55e 0%, #15803d 100%);
+    background: #16a34a;
     border-radius: 20px;
 }
 
 .top3-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-    margin-bottom: 20px;
+    gap: 12px;
+    margin-bottom: 16px;
 }
 
 .top3-card {
     background: #f8fafc;
-    border: 2px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 14px;
 }
 
 .top3-card-first {
-    border-color: #15803d;
+    border-color: #16a34a;
     background: #f0fdf4;
-}
-
-.top3-rank-badge {
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: #15803d;
-}
-
-.top3-breed-title {
-    font-size: 1.1rem;
-    font-weight: 800;
-    color: #0f172a;
-    margin: 4px 0 6px 0;
-}
-
-.top3-meta span {
-    display: block;
-    font-size: 0.85rem;
-    color: #334155;
-    font-weight: 600;
-}
-
-.top3-score-pill {
-    display: inline-block;
-    margin-top: 8px;
-    padding: 4px 10px;
-    background: #dcfce7;
-    color: #14532d;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 800;
 }
 
 .breed-detail-card {
     background: #ffffff;
-    border-radius: 16px;
-    padding: 20px;
-    border: 2px solid #e2e8f0;
-}
-
-.detail-header h3 {
-    margin: 0 0 16px 0;
-    font-size: 1.25rem;
-    color: #14532d;
-    font-weight: 800;
+    border-radius: 14px;
+    padding: 18px;
+    border: 1px solid #cbd5e1;
 }
 
 .detail-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    margin-bottom: 14px;
 }
 
 .detail-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px;
+    padding: 10px;
     background: #f8fafc;
-    border-radius: 10px;
-    border: 1px solid #cbd5e1;
-}
-
-.d-icon {
-    width: 32px;
-    height: 32px;
     border-radius: 8px;
-    background: #dcfce7;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.d-content strong {
-    display: block;
-    font-size: 0.75rem;
-    color: #15803d;
-    text-transform: uppercase;
-    font-weight: 800;
-}
-
-.d-content span {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: #020617;
-}
-
-.detail-text-block {
-    margin-top: 12px;
-    padding: 14px;
-    background: #f8fafc;
-    border-radius: 10px;
-    border: 1px solid #cbd5e1;
-}
-
-.detail-text-block strong {
-    display: block;
-    font-size: 0.85rem;
-    color: #15803d;
-    margin-bottom: 4px;
-    font-weight: 800;
-}
-
-.detail-text-block p {
-    margin: 0;
-    font-size: 0.9rem;
-    color: #0f172a;
-    font-weight: 600;
-}
-
-.timeline-container {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    border: 1px solid #e2e8f0;
 }
 
 .timeline-step {
     display: flex;
     align-items: flex-start;
-    gap: 14px;
+    gap: 12px;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 14px;
-    padding: 16px;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
 }
 
 .step-num {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: #15803d;
+    background: #16a34a;
     color: #ffffff;
-    font-weight: 900;
+    font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 }
 
-.step-content h4 {
-    margin: 0 0 4px 0;
-    font-size: 1rem;
-    font-weight: 800;
-    color: #14532d;
-}
-
-.step-content p {
-    margin: 0;
-    font-size: 0.88rem;
-    color: #334155;
-    font-weight: 600;
-}
-
 .model-info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-    margin-top: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
 }
 
 .model-info-item {
-    padding: 14px;
+    padding: 12px;
     background: #f8fafc;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid #cbd5e1;
-}
-
-.model-info-item label {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: #15803d;
-    font-weight: 800;
-    display: block;
-    margin-bottom: 2px;
-}
-
-.model-info-item span {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: #020617;
-}
-
-.status-badge-ok {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    background: #dcfce7;
-    color: #14532d;
-    border: 1px solid #86efac;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 800;
 }
 
 .footer-card {
     text-align: center;
     background: #ffffff !important;
 }
-
-.footer-dev-name {
-    font-size: 1.3rem;
-    font-weight: 900;
-    color: #14532d;
-}
-
-.footer-dev-title {
-    font-size: 0.9rem;
-    color: #475569;
-    margin: 4px 0 16px 0;
-    font-weight: 700;
-}
-
-.footer-links {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.btn-social {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 18px;
-    background: #ffffff;
-    border: 2px solid #cbd5e1;
-    border-radius: 40px;
-    color: #15803d;
-    font-size: 0.88rem;
-    font-weight: 800;
-    text-decoration: none;
-}
-
-.btn-social:hover {
-    background: #15803d;
-    color: #ffffff;
-}
-
-.footer-note {
-    font-size: 0.82rem;
-    color: #64748b;
-    font-weight: 600;
-}
 """
 
 with gr.Blocks(title="AI Breed Identification System") as demo:
     
-    # HTML Background Slideshow
+    # Render Background Slideshow Layer
     gr.HTML("""
     <div class="slideshow-bg">
         <div class="slideshow-slide"></div>
@@ -826,106 +515,51 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
         <div class="slideshow-slide"></div>
         <div class="slideshow-slide"></div>
     </div>
-    <div class="slideshow-overlay"></div>
     """)
 
-    with gr.Column(elem_id="top"):
+    with gr.Column():
         
         # 1. HERO SECTION
         with gr.Column(elem_classes=["glass-card", "hero-wrapper"]):
             gr.HTML("""
-            <div class="hero-logo-box">
-                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path><path d="M12 6a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm0 10a4 4 0 1 1 4-4 4 4 0 0 1-4 4z"></path></svg>
-            </div>
-            <h1 class="hero-title">AI-Based Cattle & Buffalo Breed Identification System</h1>
-            <p class="hero-subtitle">Identify the most probable cattle or buffalo breed using Artificial Intelligence powered by TF-IDF Vectorization and Cosine Similarity.</p>
+            <h1 class="hero-title">🐄 AI Cattle & Buffalo Breed Identification</h1>
+            <p class="hero-subtitle">Identify the most probable cattle or buffalo breed using TF-IDF Vectorization and Cosine Similarity.</p>
             <div class="badges-container">
                 <span class="hero-badge">AI Powered</span>
                 <span class="hero-badge">TF-IDF</span>
                 <span class="hero-badge">Cosine Similarity</span>
                 <span class="hero-badge">Fast Prediction</span>
                 <span class="hero-badge">Indian Breeds</span>
-                <span class="hero-badge">Global Breeds</span>
             </div>
             """)
 
         # 2. HOW TO FILL DETAILS SECTION
         with gr.Column(elem_classes=["glass-card"]):
             gr.HTML("""
-            <div class="section-hdr-title">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <span>How to Fill the Details</span>
-            </div>
+            <div class="section-hdr-title">📌 How to Fill the Details</div>
             <div class="guide-grid">
                 <div class="guide-item">
-                    <div class="guide-icon-box">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                    </div>
-                    <div class="guide-text">
-                        <h4>Animal Type</h4>
-                        <p>Select whether the subject is a Cow or Buffalo from the dropdown.</p>
-                    </div>
+                    <h4>Animal Type</h4>
+                    <p>Select Cow or Buffalo.</p>
                 </div>
                 <div class="guide-item">
-                    <div class="guide-icon-box">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>
-                    </div>
-                    <div class="guide-text">
-                        <h4>Climate Suitability</h4>
-                        <p>Choose the primary ecological region (e.g., Arid, Tropical, Humid).</p>
-                    </div>
+                    <h4>Climate Suitability</h4>
+                    <p>Choose region (Arid, Tropical, Humid).</p>
                 </div>
                 <div class="guide-item">
-                    <div class="guide-icon-box">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
-                    </div>
-                    <div class="guide-text">
-                        <h4>Average Milk Yield</h4>
-                        <p>Enter average daily milk yield in kilograms (e.g., 14.5 kg/day).</p>
-                    </div>
+                    <h4>Milk Yield</h4>
+                    <p>Daily yield in kg (e.g. 14.5 kg/day).</p>
                 </div>
                 <div class="guide-item">
-                    <div class="guide-icon-box">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
-                    </div>
-                    <div class="guide-text">
-                        <h4>Milk Fat %</h4>
-                        <p>Enter the percentage of butterfat content in milk (e.g., 4.5% to 8%).</p>
-                    </div>
+                    <h4>Milk Fat %</h4>
+                    <p>Butterfat percentage (e.g. 4.5%).</p>
                 </div>
-                <div class="guide-item">
-                    <div class="guide-icon-box">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                    </div>
-                    <div class="guide-text">
-                        <h4>Physical Traits</h4>
-                        <p>Describe hump size, horn style, coat color, body shape, and forehead profile.</p>
-                    </div>
-                </div>
-                <div class="guide-item">
-                    <div class="guide-icon-box">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-                    </div>
-                    <div class="guide-text">
-                        <h4>Utility & Features</h4>
-                        <p>Specify primary use (Milch, Draught, Dual) along with distinct behaviors.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="info-alert-banner">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <span>The more detailed your information, the more accurate the prediction becomes.</span>
             </div>
             """)
 
         # 3. PREDICTION INPUT SECTION
         with gr.Column(elem_classes=["glass-card"]):
-            gr.HTML("""
-            <div class="section-hdr-title">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <span>Input Animal Attributes</span>
-            </div>
-            """)
+            gr.HTML("<div class='section-hdr-title'>📝 Input Animal Attributes</div>")
             
             validation_out = gr.HTML()
             
@@ -962,15 +596,15 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
                 with gr.Column():
                     traits_input = gr.TextArea(
                         label="Physical Traits",
-                        placeholder="Describe coat color, horn style, hump size, ears...",
-                        value="Reddish brown coat, white speckles, pendulous ears, prominent broad forehead, medium curved horns.",
+                        placeholder="Describe coat color, horns, hump...",
+                        value="Reddish brown coat, white speckles, pendulous ears, prominent broad forehead.",
                         lines=3
                     )
                 with gr.Column():
                     features_input = gr.TextArea(
                         label="Special Features",
-                        placeholder="Describe heat tolerance, disease resistance, docile temperament...",
-                        value="Extremely high heat tolerance, resistant to tropical tick diseases, docile temperament.",
+                        placeholder="Describe heat tolerance, temperament...",
+                        value="Extremely high heat tolerance, resistant to diseases, docile temperament.",
                         lines=3
                     )
 
@@ -978,16 +612,11 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
 
         # 4. RESULT SECTION
         with gr.Column(elem_classes=["glass-card"]):
-            gr.HTML("""
-            <div class="section-hdr-title">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                <span>AI Identification Results</span>
-            </div>
-            """)
+            gr.HTML("<div class='section-hdr-title'>📊 AI Identification Results</div>")
             
             res_summary_out = gr.HTML("""
-            <div style="text-align:center; padding: 20px; color: #334155; font-size:0.95rem; font-weight:700;">
-                Submit animal attributes above to compute TF-IDF cosine vector similarities and display match predictions.
+            <div style="text-align:center; padding: 16px; color: #334155; font-weight:700;">
+                Fill details above and click 'Predict Breed'.
             </div>
             """)
             
@@ -998,106 +627,47 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
         # 5. HOW THE SYSTEM WORKS SECTION
         with gr.Column(elem_classes=["glass-card"]):
             gr.HTML("""
-            <div class="section-hdr-title">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                <span>How the System Works</span>
-            </div>
-            <div class="timeline-container">
+            <div class="section-hdr-title">⚙️ How the System Works</div>
+            <div>
                 <div class="timeline-step">
                     <div class="step-num">1</div>
-                    <div class="step-content">
-                        <h4>User Enters Animal Details</h4>
-                        <p>Physical attributes, climate suitability, daily milk yield, and distinct traits are collected through the structured interface.</p>
-                    </div>
+                    <div><strong>Input:</strong> User enters animal parameters.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-num">2</div>
-                    <div class="step-content">
-                        <h4>TF-IDF Converts Text Into Vectors</h4>
-                        <p>Term Frequency-Inverse Document Frequency transforms raw textual attributes into high-dimensional numerical feature vectors.</p>
-                    </div>
+                    <div><strong>TF-IDF Vectorization:</strong> Converts input into mathematical vectors.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-num">3</div>
-                    <div class="step-content">
-                        <h4>Cosine Similarity Analysis</h4>
-                        <p>The mathematical cosine distance evaluates angular alignment between the input vector and all standard breed dossiers in the dataset.</p>
-                    </div>
+                    <div><strong>Cosine Similarity:</strong> Calculates distance against dataset breeds.</div>
                 </div>
                 <div class="timeline-step">
                     <div class="step-num">4</div>
-                    <div class="step-content">
-                        <h4>Highest Similarity Selection</h4>
-                        <p>Statistical ranking determines the primary breed candidate exhibiting the closest feature affinity score.</p>
-                    </div>
-                </div>
-                <div class="timeline-step">
-                    <div class="step-num">5</div>
-                    <div class="step-content">
-                        <h4>Top 3 Matches Displayed</h4>
-                        <p>Comprehensive result panels present the best fit along with alternative candidate probabilities and full trait dossiers.</p>
-                    </div>
+                    <div><strong>Output:</strong> Top 3 matched breeds displayed with percentage match.</div>
                 </div>
             </div>
             """)
 
         # 6. ABOUT THE AI MODEL
         with gr.Column(elem_classes=["glass-card"]):
-            status_badge = "<span class='status-badge-ok'>Loaded Successfully</span>" if MODEL_LOADED else f"<span style='color:#b91c1c; font-weight:800;'>Error Loading Pickle ({MODEL_STATUS_MSG})</span>"
+            status_badge = "<span style='color:#16a34a; font-weight:800;'>✓ Loaded Successfully</span>" if MODEL_LOADED else f"<span style='color:#b91c1c; font-weight:800;'>Error ({MODEL_STATUS_MSG})</span>"
             
             gr.HTML(f"""
-            <div class="section-hdr-title">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                <span>About the AI Model</span>
-            </div>
-            <div style="margin-bottom: 14px;">
-                <strong style="color:#020617; font-size: 1rem;">Model Status:</strong> {status_badge}
-            </div>
+            <div class="section-hdr-title">🤖 About the AI Model</div>
+            <p><strong>Status:</strong> {status_badge}</p>
             <div class="model-info-grid">
-                <div class="model-info-item">
-                    <label>Prediction Technique</label>
-                    <span>TF-IDF Vectorization</span>
-                </div>
-                <div class="model-info-item">
-                    <label>Similarity Algorithm</label>
-                    <span>Cosine Similarity</span>
-                </div>
-                <div class="model-info-item">
-                    <label>Prediction Type</label>
-                    <span>Similarity-Based Identification</span>
-                </div>
-                <div class="model-info-item">
-                    <label>Dataset</label>
-                    <span>Breed Information Dataset</span>
-                </div>
-                <div class="model-info-item">
-                    <label>Output Format</label>
-                    <span>Top Matching Breed + Match %</span>
-                </div>
+                <div class="model-info-item"><label>Technique</label><span>TF-IDF Vectorization</span></div>
+                <div class="model-info-item"><label>Algorithm</label><span>Cosine Similarity</span></div>
+                <div class="model-info-item"><label>Type</label><span>Content-based Identification</span></div>
             </div>
             """)
 
         # 7. FOOTER SECTION
         with gr.Column(elem_classes=["glass-card", "footer-card"]):
             gr.HTML("""
-            <div class="footer-dev-name">Developer: Prachi Valecha</div>
-            <div class="footer-dev-title">
-                Bachelor of Computer Applications (BCA)<br>
-                Specialization in Cloud Technology & Information Security<br>
-                Panipat Institute of Engineering and Technology
-            </div>
-            <div class="footer-links">
-                <a href="https://github.com/yourusername" target="_blank" class="btn-social">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                    <span>GitHub Profile</span>
-                </a>
-                <a href="https://linkedin.com/in/yourusername" target="_blank" class="btn-social">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                    <span>LinkedIn Profile</span>
-                </a>
-            </div>
-            <div class="footer-note">
-                Made with Python, Gradio, TF-IDF and Cosine Similarity.
+            <div style="font-size: 1.1rem; font-weight: 800; color: #15803d;">Developer: Prachi Valecha</div>
+            <div style="font-size: 0.85rem; color: #475569; margin-top: 4px;">
+                BCA (Cloud Technology & Information Security) | Panipat Institute of Engineering and Technology
             </div>
             """)
 
@@ -1123,6 +693,5 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
     )
 
 if __name__ == "__main__":
-    # Render cloud binding fix
     port = int(os.environ.get("PORT", 7860))
     demo.launch(server_name="0.0.0.0", server_port=port, css=custom_css)
