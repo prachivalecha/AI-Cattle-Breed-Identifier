@@ -1,10 +1,14 @@
 import os
 import re
+import warnings
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import gradio as gr
+
+# Suppress unpickling version warnings and Gradio deprecation notices
+warnings.filterwarnings("ignore")
 
 # ==============================================================================
 # MODEL LOADING & FALLBACK HANDLER
@@ -812,7 +816,7 @@ input:focus, select:focus, textarea:focus {
 }
 """
 
-with gr.Blocks(title="AI Breed Identification System", css=custom_css) as demo:
+with gr.Blocks(title="AI Breed Identification System") as demo:
     
     # HTML Background Slideshow
     gr.HTML("""
@@ -1119,4 +1123,6 @@ with gr.Blocks(title="AI Breed Identification System", css=custom_css) as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch()
+    # Render cloud binding fix
+    port = int(os.environ.get("PORT", 7860))
+    demo.launch(server_name="0.0.0.0", server_port=port, css=custom_css)
