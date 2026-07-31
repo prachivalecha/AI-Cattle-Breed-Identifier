@@ -193,35 +193,40 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE (STRICT HARDCODED HIGH-CONTRAST CSS)
+# GRADIO APPLICATION INTERFACE (FIXED DARK BOXES & HIGH CONTRAST)
 # ==============================================================================
 custom_css = """
 /* Import Clean Font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* Force Full Window Canvas & Background */
+/* Force Page Canvas */
 html, body, .gradio-container, .main, div[class*="app"] {
     background-color: #f8fafc !important;
     font-family: 'Inter', sans-serif !important;
     color: #020617 !important;
 }
 
-/* FIX DARK BOXES: Override all internal Gradio component containers */
+/* FIX DARK BOXES: Hard override every possible Gradio input container wrapper */
 div[data-testid="block"], 
 div[data-testid="cell"], 
+div[data-testid="textbox"],
+div[data-testid="dropdown"],
 .gr-box, 
 .gr-form, 
 .form, 
 .block, 
 div[class*="form"],
-div[class*="block"] {
+div[class*="block"],
+div[class*="gr-box"],
+div[class*="gradio-dropdown"],
+div[class*="gradio-textbox"] {
     background: #ffffff !important;
     background-color: #ffffff !important;
     border-color: #cbd5e1 !important;
+    box-shadow: none !important;
 }
 
-/* TOTAL HARD OVERRIDE FOR ALL TEXT VISIBILITY IN ALL CARDS */
-*, 
+/* HARD OVERRIDE FOR ALL LABELS & INPUT TEXT */
 label, 
 .gradio-container label, 
 span[data-testid="block-info"], 
@@ -229,26 +234,21 @@ span[data-testid="block-info"],
 span, 
 p, 
 div,
-h1, h2, h3, h4, h5, h6,
-.step-content,
-.timeline-step,
-.timeline-step div,
-.timeline-step strong,
-.guide-item p,
-.guide-item h4 {
+h1, h2, h3, h4, h5, h6 {
     color: #020617 !important;
     font-weight: 700 !important;
     opacity: 1 !important;
 }
 
-/* Specific Section Headings in Accent Dark Green */
+/* Headings in Accent Dark Green */
 .hero-title, .section-hdr-title, .guide-item h4, .detail-header h3 {
     color: #14532d !important;
     font-weight: 900 !important;
 }
 
-/* Inputs, Dropdowns and Textareas */
-input, select, textarea, .gr-input, .gr-select {
+/* Form Inputs, Dropdowns & Textareas Styling */
+input, select, textarea, .gr-input, .gr-select, 
+.gradio-container input, .gradio-container select, .gradio-container textarea {
     color: #020617 !important;
     background-color: #ffffff !important;
     border: 2px solid #cbd5e1 !important;
@@ -478,7 +478,6 @@ input:focus, select:focus, textarea:focus {
     border: 1px solid #cbd5e1 !important;
 }
 
-/* Timeline Step Visual Override */
 .timeline-step {
     display: flex;
     align-items: flex-start;
