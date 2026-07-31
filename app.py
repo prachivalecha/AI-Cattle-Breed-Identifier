@@ -31,7 +31,7 @@ def load_model():
 model_obj, MODEL_LOADED, MODEL_STATUS_MSG = load_model()
 
 # ==============================================================================
-# PREDICTION & VALIDATION LOGIC
+# IMPROVED PREDICTION & VALIDATION LOGIC
 # ==============================================================================
 def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, physical_traits, special_features):
     errors = []
@@ -67,14 +67,14 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
 
     if errors:
         error_html = "<div class='validation-card-error'>"
-        error_html += "<div class='val-header'><span>⚠️ Input Validation Notice</span></div><ul>"
+        error_html += "<div class='val-header' style='color:#b91c1c !important; font-weight:800; font-size:1.05rem;'><span>⚠️ Input Validation Notice</span></div><ul style='margin-top:6px;'>"
         for err in errors:
-            error_html += f"<li>{err}</li>"
+            error_html += f"<li style='color:#b91c1c !important; font-weight:700;'>{err}</li>"
         error_html += "</ul></div>"
         return error_html, "", "", "", ""
 
     if not MODEL_LOADED:
-        error_html = f"<div class='validation-card-error'><div class='val-header'><span>⚠️ Model Error</span></div><p>{MODEL_STATUS_MSG}</p></div>"
+        error_html = f"<div class='validation-card-error'><div class='val-header' style='color:#b91c1c !important;'><span>⚠️ Model Error</span></div><p style='color:#b91c1c !important;'>{MODEL_STATUS_MSG}</p></div>"
         return error_html, "", "", "", ""
 
     try:
@@ -82,17 +82,32 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         tfidf_mat = model_obj['tfidf_matrix']
         df = model_obj['breed_data']
 
-        # Clean text concatenation for best TF-IDF vector match
-        combined_user_text = f"{animal_type} {climate} {utility} milk yield {milk_yield} kg fat {milk_fat} percent {physical_traits} {special_features}"
+        # Weighted text construction: Boost physical traits and features 3x so physical details drive the match
+        weighted_user_text = f"{animal_type} {animal_type} {climate} {utility} " \
+                             f"{physical_traits} {physical_traits} {physical_traits} " \
+                             f"{special_features} {special_features} " \
+                             f"milk yield {milk_yield} fat {milk_fat} percent"
         
-        # Transform user text into vector
-        user_vector = tfidf_vec.transform([combined_user_text])
+        # Transform user text into TF-IDF vector
+        user_vector = tfidf_vec.transform([weighted_user_text])
         similarities = cosine_similarity(user_vector, tfidf_mat).flatten()
 
-        # Sort indices by highest similarity
-        top_indices = np.argsort(similarities)[::-1]
+        # Keyword Boost Logic for exact trait alignment (e.g. domed, pendulous, hump, horns)
+        traits_lower = (physical_traits + " " + special_features).lower()
+        keywords_to_check = ['pendulous', 'domed', 'hump', 'lyre', 'dewlap', 'curved', 'broad', 'horns', 'heat']
+        
+        boosts = np.zeros(len(df))
+        for key in keywords_to_check:
+            if key in traits_lower:
+                for idx, row in df.iterrows():
+                    row_text = " ".join([str(val) for val in row.values]).lower()
+                    if key in row_text:
+                        boosts[idx] += 0.04  # Extra similarity boost for specific trait matches
 
-        # Filter indices by Animal Type if column exists in DataFrame
+        adjusted_similarities = similarities + boosts
+        top_indices = np.argsort(adjusted_similarities)[::-1]
+
+        # Filter indices by Animal Type if category column exists
         type_col = None
         for col in ['Animal', 'Type', 'Animal Type', 'Category']:
             if col in df.columns:
@@ -106,12 +121,12 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
 
         top3_indices = top_indices[:3]
         best_idx = top3_indices[0]
-        best_score = float(similarities[best_idx])
-        score_pct = round(best_score * 100, 1)
+        best_score = float(adjusted_similarities[best_idx])
+        # Cap confidence score display logically
+        score_pct = round(min(best_score * 100, 98.5), 1)
 
-        # Retrieve breed details flexibly
+        # Retrieve breed name safely
         best_row = df.iloc[best_idx]
-        
         breed_col = None
         for col in ['Breed', 'Breed Name', 'Name', 'Breed_Name']:
             if col in df.columns:
@@ -120,17 +135,17 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         
         best_breed_name = str(best_row[breed_col]) if breed_col else f"Breed #{best_idx+1}"
 
-        # Result Summary HTML
+        # Result Summary HTML with High Contrast Styling
         result_summary_html = f"""
         <div class="result-success-box">
-            <div class="result-badge-hdr">
-                <span>✓ Prediction Successful</span>
+            <div class="result-badge-hdr" style="color: #15803d !important; font-weight: 900; font-size: 0.95rem;">
+                <span>✓ PREDICTION SUCCESSFUL</span>
             </div>
-            <div class="predicted-main-title">{best_breed_name}</div>
-            <div class="confidence-container">
-                <div class="confidence-label-row">
-                    <span>AI Match Confidence</span>
-                    <span>{score_pct}% Match</span>
+            <div class="predicted-main-title" style="color: #14532d !important; font-size: 2.3rem; font-weight: 900; margin: 8px 0;">{best_breed_name}</div>
+            <div class="confidence-container" style="max-width: 480px; margin: 0 auto;">
+                <div class="confidence-label-row" style="color: #0f172a !important; font-weight: 800; font-size: 1rem; display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: #0f172a !important;">AI Match Confidence</span>
+                    <span style="color: #15803d !important; font-weight: 900;">{score_pct}% Match</span>
                 </div>
                 <div class="progress-bar-bg">
                     <div class="progress-bar-fill" style="width: {score_pct}%;"></div>
@@ -139,34 +154,34 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         </div>
         """
 
-        # Top 3 Candidates HTML
+        # Top 3 Candidates HTML with Dark Text Overrides
         top3_html = "<div class='top3-grid'>"
         for rank, idx in enumerate(top3_indices, 1):
             row = df.iloc[idx]
             b_name = str(row[breed_col]) if breed_col else f"Breed #{idx+1}"
-            b_score = round(float(similarities[idx]) * 100, 1)
+            b_score = round(min(float(adjusted_similarities[idx]) * 100, 98.5), 1)
             b_type = row.get('Animal', row.get('Type', animal_type))
             b_origin = row.get('Origin', row.get('Region', 'Native India'))
             
             top3_html += f"""
             <div class="top3-card {'top3-card-first' if rank==1 else ''}">
-                <div class="top3-rank-badge">Candidate #{rank}</div>
-                <div class="top3-breed-title">{b_name}</div>
-                <div class="top3-meta">
-                    <span><strong>Type:</strong> {b_type}</span>
-                    <span><strong>Origin:</strong> {b_origin}</span>
+                <div class="top3-rank-badge" style="color: #15803d !important; font-weight: 900; font-size: 0.82rem; text-transform: uppercase;">Candidate #{rank}</div>
+                <div class="top3-breed-title" style="color: #0f172a !important; font-weight: 900; font-size: 1.2rem; margin: 4px 0;">{b_name}</div>
+                <div class="top3-meta" style="color: #1e293b !important; font-weight: 700; font-size: 0.9rem; line-height: 1.5;">
+                    <span style="color: #1e293b !important; display: block;"><strong style="color: #15803d !important;">Type:</strong> {b_type}</span>
+                    <span style="color: #1e293b !important; display: block;"><strong style="color: #15803d !important;">Origin:</strong> {b_origin}</span>
                 </div>
-                <div class="top3-score-pill">{b_score}% Similarity</div>
+                <div class="top3-score-pill" style="color: #14532d !important; font-weight: 900; background: #dcfce7; padding: 4px 12px; border-radius: 20px; display: inline-block; margin-top: 8px; font-size: 0.85rem;">{b_score}% Similarity</div>
             </div>
             """
         top3_html += "</div>"
 
-        # Safe extraction for Breed Dossier
+        # Safe Extraction for Comprehensive Dossier
         b_climate = best_row.get('Climate', best_row.get('Climate Suitability', climate))
         b_yield = best_row.get('Milk Yield', best_row.get('Average Milk Yield', f"{milk_yield} kg/day"))
         b_fat = best_row.get('Milk Fat', best_row.get('Fat %', f"{milk_fat}%"))
         b_utility = best_row.get('Utility', utility)
-        b_cross = best_row.get('Crossbreeding', best_row.get('Crossbreeding Programs', 'Extensively used in indigenous programs.'))
+        b_cross = best_row.get('Crossbreeding', best_row.get('Crossbreeding Programs', 'Extensively used in indigenous improvement programs.'))
         b_traits = best_row.get('Physical Traits', physical_traits)
         b_special = best_row.get('Special Features', special_features)
         b_origin = best_row.get('Origin', best_row.get('Region of Origin', 'Pan-India native tract'))
@@ -174,35 +189,35 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         breed_info_html = f"""
         <div class="breed-detail-card">
             <div class="detail-header">
-                <h3>Comprehensive Breed Dossier: {best_breed_name}</h3>
+                <h3 style="color: #14532d !important; font-weight: 900; font-size: 1.3rem; margin-bottom: 14px;">Comprehensive Breed Dossier: {best_breed_name}</h3>
             </div>
             <div class="detail-grid">
                 <div class="detail-item">
-                    <div class="d-content"><strong>Region of Origin</strong><span>{b_origin}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block; font-size:0.78rem; text-transform:uppercase;">Region of Origin</strong><span style="color: #0f172a !important; font-weight: 800; font-size:0.95rem;">{b_origin}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong>Climate Suitability</strong><span>{b_climate}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block; font-size:0.78rem; text-transform:uppercase;">Climate Suitability</strong><span style="color: #0f172a !important; font-weight: 800; font-size:0.95rem;">{b_climate}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong>Average Milk Yield</strong><span>{b_yield}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block; font-size:0.78rem; text-transform:uppercase;">Average Milk Yield</strong><span style="color: #0f172a !important; font-weight: 800; font-size:0.95rem;">{b_yield}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong>Milk Fat Content</strong><span>{b_fat}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block; font-size:0.78rem; text-transform:uppercase;">Milk Fat Content</strong><span style="color: #0f172a !important; font-weight: 800; font-size:0.95rem;">{b_fat}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong>Primary Utility</strong><span>{b_utility}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block; font-size:0.78rem; text-transform:uppercase;">Primary Utility</strong><span style="color: #0f172a !important; font-weight: 800; font-size:0.95rem;">{b_utility}</span></div>
                 </div>
                 <div class="detail-item">
-                    <div class="d-content"><strong>Crossbreeding Value</strong><span>{b_cross}</span></div>
+                    <div class="d-content"><strong style="color: #15803d !important; display: block; font-size:0.78rem; text-transform:uppercase;">Crossbreeding Value</strong><span style="color: #0f172a !important; font-weight: 800; font-size:0.95rem;">{b_cross}</span></div>
                 </div>
             </div>
             <div class="detail-text-block">
-                <strong>Physical Traits:</strong>
-                <p>{b_traits}</p>
+                <strong style="color: #15803d !important; font-weight: 900; display: block; margin-bottom: 4px;">Physical Traits:</strong>
+                <p style="color: #0f172a !important; font-weight: 700; margin: 0; font-size:0.92rem;">{b_traits}</p>
             </div>
             <div class="detail-text-block" style="margin-top: 10px;">
-                <strong>Special Distinctive Features:</strong>
-                <p>{b_special}</p>
+                <strong style="color: #15803d !important; font-weight: 900; display: block; margin-bottom: 4px;">Special Distinctive Features:</strong>
+                <p style="color: #0f172a !important; font-weight: 700; margin: 0; font-size:0.92rem;">{b_special}</p>
             </div>
         </div>
         """
@@ -210,20 +225,71 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         return "", result_summary_html, top3_html, breed_info_html, "Evaluated."
 
     except Exception as ex:
-        err_msg = f"<div class='validation-card-error'><div class='val-header'><span>⚠️ Prediction Error</span></div><p>{str(ex)}</p></div>"
+        err_msg = f"<div class='validation-card-error'><div class='val-header'><span style='color:#b91c1c !important;'>⚠️ Prediction Error</span></div><p style='color:#b91c1c !important;'>{str(ex)}</p></div>"
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE
+# GRADIO APPLICATION INTERFACE (STRICT HIGH CONTRAST & FORCE LIGHT THEME)
 # ==============================================================================
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* Global Canvas Setup */
+/* DISABLE DARK MODE ENTIRELY AT ALL LEVEL SELECTORS */
+:root, html, body, .dark, .gradio-container, .gradio-container * {
+    color-scheme: light !important;
+    --body-text-color: #0f172a !important;
+    --block-label-text-color: #0f172a !important;
+    --block-title-text-color: #0f172a !important;
+    --block-background-fill: #ffffff !important;
+    --input-background-fill: #ffffff !important;
+    --background-fill-primary: #ffffff !important;
+    --background-fill-secondary: #f8fafc !important;
+    --border-color-primary: #cbd5e1 !important;
+}
+
 body, .gradio-container {
     font-family: 'Inter', sans-serif !important;
     background-color: #f8fafc !important;
     color: #0f172a !important;
+}
+
+/* HARD OVERRIDE GRADIO INTERNAL DARK CONTAINERS & CARDS */
+div[class*="block"], 
+div[class*="cell"], 
+div[class*="form"],
+div[class*="gr-box"],
+div[class*="input"],
+div[data-testid="textbox"],
+div[data-testid="dropdown"],
+.block, .form, .gr-form, .gr-box {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* ALL FORM INPUTS & TEXTAREAS CLEAN WHITE WITH DARK TEXT */
+input, select, textarea, 
+.gradio-container input, 
+.gradio-container select, 
+.gradio-container textarea,
+.gradio-container .input-container,
+div[data-testid="textbox"] textarea,
+div[data-testid="dropdown"] input,
+div[data-testid="dropdown"] .single-select {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 1.5px solid #94a3b8 !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+}
+
+/* ALL LABELS IN BOLD CHARCOAL */
+label span, .gradio-container label span, .gradio-container .block-title {
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    font-size: 0.92rem !important;
 }
 
 /* Background Slideshow Layer */
@@ -268,43 +334,24 @@ body, .gradio-container {
 
 @keyframes imageFade {
     0% { opacity: 0; }
-    15% { opacity: 0.35; }
-    35% { opacity: 0.35; }
+    15% { opacity: 0.4; }
+    35% { opacity: 0.4; }
     50% { opacity: 0; }
     100% { opacity: 0; }
 }
 
-/* Glassmorphic Container Cards */
+/* Glassmorphic Cards Overlay */
 .glass-card {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1px solid #cbd5e1 !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    border: 1.5px solid #cbd5e1 !important;
     border-radius: 16px !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
     padding: 24px !important;
     margin-bottom: 24px !important;
     position: relative;
     z-index: 10;
 }
 
-/* Form Controls */
-.gradio-container input, 
-.gradio-container select, 
-.gradio-container textarea, 
-.gradio-container .input-container {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1.5px solid #94a3b8 !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-}
-
-.gradio-container label span {
-    color: #0f172a !important;
-    font-weight: 800 !important;
-    font-size: 0.92rem !important;
-}
-
-/* Typography & Headings */
 .hero-title {
     font-size: 2.2rem !important;
     font-weight: 900 !important;
@@ -315,11 +362,11 @@ body, .gradio-container {
 
 .hero-subtitle {
     font-size: 1rem !important;
-    color: #334155 !important;
+    color: #0f172a !important;
     text-align: center;
     max-width: 750px !important;
     margin: 0 auto 16px auto !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
 
 .badges-container {
@@ -356,7 +403,7 @@ body, .gradio-container {
 .guide-item {
     padding: 12px;
     background: #f8fafc !important;
-    border: 1px solid #e2e8f0 !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 10px;
 }
 
@@ -364,14 +411,14 @@ body, .gradio-container {
     margin: 0 0 4px 0;
     font-size: 0.95rem;
     color: #14532d !important;
-    font-weight: 800 !important;
+    font-weight: 900 !important;
 }
 
 .guide-item p {
     margin: 0;
     font-size: 0.85rem;
-    color: #334155 !important;
-    font-weight: 600 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
 }
 
 .predict-btn {
@@ -388,7 +435,6 @@ body, .gradio-container {
     margin-top: 12px !important;
 }
 
-/* Results Formatting */
 .result-success-box {
     background: #f0fdf4 !important;
     border: 2px solid #86efac !important;
@@ -439,48 +485,11 @@ body, .gradio-container {
     background: #f0fdf4 !important;
 }
 
-.top3-rank-badge {
-    color: #15803d !important;
-    font-weight: 900;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-}
-
-.top3-breed-title {
-    color: #0f172a !important;
-    font-weight: 900;
-    font-size: 1.1rem;
-    margin: 4px 0;
-}
-
-.top3-meta {
-    color: #334155 !important;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.top3-score-pill {
-    color: #14532d !important;
-    font-weight: 800;
-    background: #dcfce7;
-    padding: 4px 10px;
-    border-radius: 20px;
-    display: inline-block;
-    margin-top: 6px;
-    font-size: 0.82rem;
-}
-
 .breed-detail-card {
     background: #ffffff !important;
     border-radius: 12px;
     padding: 18px;
     border: 1.5px solid #cbd5e1 !important;
-}
-
-.detail-header h3 {
-    color: #14532d !important;
-    font-weight: 900;
-    margin-bottom: 12px;
 }
 
 .detail-grid {
@@ -494,34 +503,7 @@ body, .gradio-container {
     padding: 10px;
     background: #f8fafc !important;
     border-radius: 8px;
-    border: 1px solid #e2e8f0 !important;
-}
-
-.detail-item strong {
-    color: #15803d !important;
-    display: block;
-    font-size: 0.78rem;
-    text-transform: uppercase;
-}
-
-.detail-item span {
-    color: #0f172a !important;
-    font-weight: 800;
-    font-size: 0.9rem;
-}
-
-.detail-text-block strong {
-    color: #15803d !important;
-    font-weight: 900;
-    display: block;
-    margin-bottom: 2px;
-}
-
-.detail-text-block p {
-    color: #0f172a !important;
-    font-weight: 600;
-    margin: 0;
-    font-size: 0.9rem;
+    border: 1px solid #cbd5e1 !important;
 }
 
 .timeline-step {
@@ -529,16 +511,10 @@ body, .gradio-container {
     align-items: flex-start;
     gap: 12px;
     background: #f8fafc !important;
-    border: 1px solid #cbd5e1 !important;
+    border: 1.5px solid #cbd5e1 !important;
     border-radius: 10px;
     padding: 12px;
     margin-bottom: 8px;
-}
-
-.timeline-step div {
-    color: #0f172a !important;
-    font-weight: 700;
-    font-size: 0.9rem;
 }
 
 .step-num {
@@ -587,15 +563,25 @@ body, .gradio-container {
     padding: 14px;
     margin-bottom: 12px;
 }
+"""
 
-.val-header {
-    color: #991b1b;
-    font-weight: 800;
-    margin-bottom: 4px;
+js_remove_dark = """
+function() {
+    document.documentElement.classList.remove('dark');
+    document.body.classList.remove('dark');
+    const observer = new MutationObserver(function() {
+        if (document.documentElement.classList.contains('dark')) {
+            document.documentElement.classList.remove('dark');
+        }
+        if (document.body.classList.contains('dark')) {
+            document.body.classList.remove('dark');
+        }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 }
 """
 
-with gr.Blocks(title="AI Breed Identification System") as demo:
+with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(primary_hue="green"), js=js_remove_dark) as demo:
     
     # Render Background Slideshow Layer
     gr.HTML("""
@@ -705,7 +691,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             gr.HTML("<div class='section-hdr-title'>📊 AI Identification Results</div>")
             
             res_summary_out = gr.HTML("""
-            <div style="text-align:center; padding: 12px; color: #334155; font-weight:700;">
+            <div style="text-align:center; padding: 12px; color: #0f172a; font-weight:800;">
                 Fill details above and click 'Predict Breed'.
             </div>
             """)
@@ -744,7 +730,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             
             gr.HTML(f"""
             <div class="section-hdr-title">🤖 About the AI Model</div>
-            <p style="margin-bottom: 12px;"><strong>Status:</strong> {status_badge}</p>
+            <p style="margin-bottom: 12px; color:#0f172a; font-weight:800;"><strong>Status:</strong> {status_badge}</p>
             <div class="guide-grid">
                 <div class="guide-item">
                     <h4>Technique</h4>
@@ -765,7 +751,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
         with gr.Column(elem_classes=["glass-card", "footer-card"]):
             gr.HTML("""
             <div style="font-size: 1.2rem; font-weight: 900; color: #14532d;">Developer: Prachi Valecha</div>
-            <div style="font-size: 0.88rem; color: #334155; font-weight: 700; margin-top: 4px; margin-bottom: 12px;">
+            <div style="font-size: 0.88rem; color: #0f172a; font-weight: 800; margin-top: 4px; margin-bottom: 12px;">
                 Bachelor of Computer Applications (BCA)<br>
                 Panipat Institute of Engineering and Technology
             </div>
@@ -779,7 +765,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
                     LinkedIn Profile
                 </a>
             </div>
-            <div style="font-size: 0.82rem; color: #64748b; font-weight: 600;">
+            <div style="font-size: 0.82rem; color: #475569; font-weight: 700;">
                 Made with Python, Gradio, TF-IDF and Cosine Similarity.
             </div>
             """)
