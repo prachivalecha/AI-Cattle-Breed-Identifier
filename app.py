@@ -229,12 +229,11 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
         return err_msg, "", "", "", ""
 
 # ==============================================================================
-# GRADIO APPLICATION INTERFACE (STRICT HIGH CONTRAST & FORCE LIGHT THEME)
+# GRADIO APPLICATION INTERFACE
 # ==============================================================================
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* DISABLE DARK MODE ENTIRELY AT ALL LEVEL SELECTORS */
 :root, html, body, .dark, .gradio-container, .gradio-container * {
     color-scheme: light !important;
     --body-text-color: #0f172a !important;
@@ -253,7 +252,6 @@ body, .gradio-container {
     color: #0f172a !important;
 }
 
-/* HARD OVERRIDE GRADIO INTERNAL DARK CONTAINERS & CARDS */
 div[class*="block"], 
 div[class*="cell"], 
 div[class*="form"],
@@ -267,7 +265,6 @@ div[data-testid="dropdown"],
     border-color: #cbd5e1 !important;
 }
 
-/* ALL FORM INPUTS & TEXTAREAS CLEAN WHITE WITH DARK TEXT */
 input, select, textarea, 
 .gradio-container input, 
 .gradio-container select, 
@@ -285,14 +282,12 @@ div[data-testid="dropdown"] .single-select {
     font-size: 0.95rem !important;
 }
 
-/* ALL LABELS IN BOLD CHARCOAL */
 label span, .gradio-container label span, .gradio-container .block-title {
     color: #0f172a !important;
     font-weight: 800 !important;
     font-size: 0.92rem !important;
 }
 
-/* Background Slideshow Layer */
 .slideshow-bg {
     position: fixed;
     top: 0;
@@ -340,7 +335,6 @@ label span, .gradio-container label span, .gradio-container .block-title {
     100% { opacity: 0; }
 }
 
-/* Glassmorphic Cards Overlay */
 .glass-card {
     background: rgba(255, 255, 255, 0.96) !important;
     border: 1.5px solid #cbd5e1 !important;
@@ -652,9 +646,9 @@ with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(p
                         value="Arid & Semi-Arid"
                     )
                     utility_input = gr.Dropdown(
-                        choices=["Milch (Dairy)", "Draught (Work)", "Dual Purpose"],
+                        choices=["Milk (Dairy)", "Draught (Work)", "Dual Purpose"],
                         label="Utility",
-                        value="Milch (Dairy)"
+                        value="Milk (Dairy)"
                     )
                 with gr.Column():
                     yield_input = gr.Textbox(
