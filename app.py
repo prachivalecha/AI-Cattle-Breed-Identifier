@@ -198,14 +198,51 @@ def predict_breed(animal_type, climate, utility, milk_yield_str, milk_fat_str, p
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-/* Global Font & Canvas */
-body, .gradio-container {
+/* Force Light Theme Base */
+:root, body, .gradio-container {
+    color-scheme: light !important;
     font-family: 'Inter', sans-serif !important;
-    background-color: #f8fafc !important;
+    background-color: #f1f5f9 !important;
     color: #0f172a !important;
 }
 
-/* Background Slideshow Layer */
+/* OVERRIDE GRADIO INTERNAL DARK WRRAAPERS */
+div[class*="block"], 
+div[class*="cell"], 
+div[class*="form"],
+div[class*="gr-box"],
+div[class*="input"],
+.block, .form, .gr-form, .gr-box {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* INPUTS, DROPDOWNS & TEXTAREAS IN CLEAN WHITE WITH DARK TEXT */
+input, select, textarea, 
+.gradio-container input, 
+.gradio-container select, 
+.gradio-container textarea,
+.gradio-container .input-container,
+div[data-testid="textbox"] textarea,
+div[data-testid="dropdown"] input {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #94a3b8 !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+}
+
+/* LABELS & HEADINGS */
+label span, .gradio-container label span {
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    font-size: 0.92rem !important;
+}
+
+/* Background Slideshow Layer (Vivid & Clear Photography) */
 .slideshow-bg {
     position: fixed;
     top: 0;
@@ -247,43 +284,24 @@ body, .gradio-container {
 
 @keyframes imageFade {
     0% { opacity: 0; }
-    15% { opacity: 0.25; }
-    35% { opacity: 0.25; }
+    15% { opacity: 0.55; }  /* Increased Opacity so photo is visible clearly */
+    35% { opacity: 0.55; }
     50% { opacity: 0; }
     100% { opacity: 0; }
 }
 
-/* Main Cards Container */
+/* Glassmorphic White Container Cards */
 .glass-card {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1px solid #cbd5e1 !important;
+    background: rgba(255, 255, 255, 0.94) !important;
+    border: 1.5px solid #cbd5e1 !important;
     border-radius: 16px !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
     padding: 24px !important;
     margin-bottom: 24px !important;
     position: relative;
     z-index: 10;
 }
 
-/* Explicit Input Field Controls */
-.gradio-container input, 
-.gradio-container select, 
-.gradio-container textarea, 
-.gradio-container .input-container {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1.5px solid #94a3b8 !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-}
-
-.gradio-container label span {
-    color: #0f172a !important;
-    font-weight: 800 !important;
-    font-size: 0.92rem !important;
-}
-
-/* Headings */
 .hero-title {
     font-size: 2.2rem !important;
     font-weight: 900 !important;
@@ -294,11 +312,11 @@ body, .gradio-container {
 
 .hero-subtitle {
     font-size: 1rem !important;
-    color: #334155 !important;
+    color: #0f172a !important;
     text-align: center;
     max-width: 750px !important;
     margin: 0 auto 16px auto !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
 
 .badges-container {
@@ -343,14 +361,14 @@ body, .gradio-container {
     margin: 0 0 4px 0;
     font-size: 0.95rem;
     color: #14532d !important;
-    font-weight: 800 !important;
+    font-weight: 900 !important;
 }
 
 .guide-item p {
     margin: 0;
     font-size: 0.85rem;
-    color: #334155 !important;
-    font-weight: 600 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
 }
 
 .predict-btn {
@@ -377,11 +395,26 @@ body, .gradio-container {
     margin-bottom: 16px;
 }
 
+.result-badge-hdr {
+    color: #15803d !important;
+    font-weight: 800;
+    font-size: 0.9rem;
+}
+
 .predicted-main-title {
     font-size: 2rem;
     font-weight: 900;
     color: #14532d !important;
     margin: 6px 0;
+}
+
+.confidence-label-row {
+    color: #0f172a !important;
+    font-weight: 800;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
 }
 
 .progress-bar-bg {
@@ -433,9 +466,20 @@ body, .gradio-container {
 }
 
 .top3-meta {
-    color: #334155 !important;
-    font-size: 0.85rem;
-    font-weight: 600;
+    color: #0f172a !important;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.top3-score-pill {
+    color: #14532d !important;
+    font-weight: 800;
+    background: #dcfce7;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.82rem;
 }
 
 .breed-detail-card {
@@ -462,7 +506,7 @@ body, .gradio-container {
     padding: 10px;
     background: #f8fafc !important;
     border-radius: 8px;
-    border: 1px solid #e2e8f0 !important;
+    border: 1px solid #cbd5e1 !important;
 }
 
 .detail-item strong {
@@ -470,6 +514,7 @@ body, .gradio-container {
     display: block;
     font-size: 0.78rem;
     text-transform: uppercase;
+    font-weight: 900;
 }
 
 .detail-item span {
@@ -487,7 +532,7 @@ body, .gradio-container {
 
 .detail-text-block p {
     color: #0f172a !important;
-    font-weight: 600;
+    font-weight: 700;
     margin: 0;
     font-size: 0.9rem;
 }
@@ -549,7 +594,14 @@ body, .gradio-container {
 }
 """
 
-with gr.Blocks(title="AI Breed Identification System") as demo:
+js_force_light = """
+function() {
+    document.documentElement.classList.remove('dark');
+    document.body.classList.remove('dark');
+}
+"""
+
+with gr.Blocks(title="AI Breed Identification System", theme=gr.themes.Default(primary_hue="green"), js=js_force_light) as demo:
     
     # Render Background Slideshow Layer
     gr.HTML("""
@@ -659,7 +711,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             gr.HTML("<div class='section-hdr-title'>📊 AI Identification Results</div>")
             
             res_summary_out = gr.HTML("""
-            <div style="text-align:center; padding: 12px; color: #334155; font-weight:700;">
+            <div style="text-align:center; padding: 12px; color: #0f172a; font-weight:800;">
                 Fill details above and click 'Predict Breed'.
             </div>
             """)
@@ -698,7 +750,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
             
             gr.HTML(f"""
             <div class="section-hdr-title">🤖 About the AI Model</div>
-            <p style="margin-bottom: 12px;"><strong>Status:</strong> {status_badge}</p>
+            <p style="margin-bottom: 12px; color:#0f172a; font-weight:800;"><strong>Status:</strong> {status_badge}</p>
             <div class="guide-grid">
                 <div class="guide-item">
                     <h4>Technique</h4>
@@ -719,7 +771,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
         with gr.Column(elem_classes=["glass-card", "footer-card"]):
             gr.HTML("""
             <div style="font-size: 1.2rem; font-weight: 900; color: #14532d;">Developer: Prachi Valecha</div>
-            <div style="font-size: 0.88rem; color: #334155; font-weight: 700; margin-top: 4px; margin-bottom: 12px;">
+            <div style="font-size: 0.88rem; color: #0f172a; font-weight: 800; margin-top: 4px; margin-bottom: 12px;">
                 Bachelor of Computer Applications (BCA)<br>
                 Panipat Institute of Engineering and Technology
             </div>
@@ -733,7 +785,7 @@ with gr.Blocks(title="AI Breed Identification System") as demo:
                     LinkedIn Profile
                 </a>
             </div>
-            <div style="font-size: 0.82rem; color: #64748b; font-weight: 600;">
+            <div style="font-size: 0.82rem; color: #475569; font-weight: 700;">
                 Made with Python, Gradio, TF-IDF and Cosine Similarity.
             </div>
             """)
